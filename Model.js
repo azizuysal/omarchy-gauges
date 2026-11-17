@@ -2,7 +2,23 @@
 // so the whole file runs under node for tests (see tests/model.test.js).
 
 var SECTOR_BYTES = 512
-var VENDORS = { "0x1002": "AMD", "0x8086": "Intel", "0x10de": "NVIDIA" }
+// Who makes a card, by PCI vendor id or, for cards that are not on a PCI bus
+// (every ARM system-on-chip), by the name of its kernel driver.
+var VENDORS = {
+  "0x1002": "AMD", "0x8086": "Intel", "0x10de": "NVIDIA",
+  "0x1af4": "Virtual", "0x15ad": "VMware", "0x1234": "Virtual",
+  "asahi": "Apple",
+  "msm": "Qualcomm", "msm_dpu": "Qualcomm", "msm-mdss": "Qualcomm", "msm_mdp": "Qualcomm", "adreno": "Qualcomm",
+  "nvidia": "NVIDIA", "nvidia-drm": "NVIDIA", "nvidia_drm": "NVIDIA",
+  "panfrost": "Arm", "panthor": "Arm",
+  "v3d": "Broadcom", "vc4": "Broadcom", "vc4-drm": "Broadcom",
+  "virtio_gpu": "Virtual", "virtio-gpu": "Virtual", "virtio-pci": "Virtual"
+}
+// What to call a card when nothing gives it a model name.
+var VENDOR_CARDS = {
+  "Apple": "Apple GPU", "Qualcomm": "Qualcomm Adreno", "Arm": "Arm Mali",
+  "Broadcom": "Broadcom VideoCore", "Virtual": "Virtual GPU"
+}
 // Filesystems that are not storage a person thinks of as a disk.
 var PSEUDO_FILESYSTEMS = [
   "tmpfs", "devtmpfs", "efivarfs", "overlay", "squashfs", "ramfs", "proc", "sysfs",
@@ -93,7 +109,7 @@ function gpuName(vendorId, label) {
   if (model === "") {
     model = text.replace(/^.*(Corporation|Inc\.|Devices, Inc\.|Corp\.)\s*/i, "").replace(/\[[^\]]*\]/g, "").trim()
   }
-  if (model === "") return vendor || "GPU"
+  if (model === "") return VENDOR_CARDS[vendor] || vendor || "GPU"
   if (vendor !== "" && model.toLowerCase().indexOf(vendor.toLowerCase()) !== 0) return vendor + " " + model
   return model
 }
@@ -292,7 +308,9 @@ function parseTemps(lines) {
     // sysfs reports millidegrees.
     var celsius = value / 1000
     if (celsius <= -40 || celsius > 150) continue
-    if (fields[0] === "cpu") temps.cpu = celsius
+    // A machine with a sensor per core sends them all; the hottest is the one
+    // worth showing.
+    if (fields[0] === "cpu") temps.cpu = temps.cpu === null ? celsius : Math.max(temps.cpu, celsius)
     else if (fields[0] === "disk") temps.disks.push(celsius)
   }
   return temps
@@ -300,13 +318,106 @@ function parseTemps(lines) {
 
 // --------------------------------------------------------------------- gpus
 
-function parseGpus(lines, names, nvidiaLines) {
+// Cards with no load figure of their own are measured by what each program
+// reports having used: lines from /proc/<pid>/fdinfo, grouped under an
+// "@ <card>" marker per program (Documentation/gpu/drm-usage-stats.rst).
+//
+// Returns { card: { clientId: { engine: {...}, cycles: {...}, total: {...},
+// capacity: {...} } } }, each keyed by engine name.
+function parseDrmClients(lines) {
+  var cards = {}
+  var card = null
+  var client = null
+  for (var i = 0; i < lines.length; i++) {
+    var line = lines[i]
+    if (line.indexOf("@ ") === 0) {
+      card = line.slice(2).trim()
+      client = null
+      if (!cards[card]) cards[card] = {}
+      continue
+    }
+    if (card === null) continue
+    var match = line.match(/^(drm-[a-z0-9-]+):\s*(\d+)/)
+    if (!match) continue
+    var key = match[1]
+    var value = Number(match[2])
+    if (key === "drm-client-id") {
+      // A program can hold several handles on the same client, and several
+      // programs can share one; they all report the same counters.
+      if (!cards[card][value]) cards[card][value] = { engine: {}, cycles: {}, total: {}, capacity: {} }
+      client = cards[card][value]
+      continue
+    }
+    if (client === null) continue
+    var kind = null
+    var name = ""
+    if (key.indexOf("drm-engine-capacity-") === 0) { kind = "capacity"; name = key.slice(20) }
+    else if (key.indexOf("drm-engine-") === 0) { kind = "engine"; name = key.slice(11) }
+    else if (key.indexOf("drm-total-cycles-") === 0) { kind = "total"; name = key.slice(17) }
+    else if (key.indexOf("drm-cycles-") === 0) { kind = "cycles"; name = key.slice(11) }
+    if (kind === null || name === "") continue
+    // Counters can briefly read lower than before; keep the larger.
+    if (!(client[kind][name] >= value)) client[kind][name] = value
+  }
+  return cards
+}
+
+// Each card's load between two readings, 0 to 1, or null where it cannot be
+// told (first reading, or a driver that reports no usage). A card is as busy
+// as its busiest engine: the 3D engine sitting idle while video decodes is
+// still a busy card.
+function drmLoad(previous, current, seconds) {
+  var load = {}
+  for (var card in current) {
+    load[card] = null
+    var before = previous ? previous[card] : null
+    if (!before || !(seconds > 0)) continue
+    var spent = {}     // engine -> nanoseconds used, all programs together
+    var cycles = {}    // engine -> cycles used, all programs together
+    var elapsed = {}   // engine -> cycles the engine's clock advanced
+    var capacity = {}
+    for (var id in current[card]) {
+      var now = current[card][id]
+      var then = before[id]
+      var name
+      for (name in now.capacity) capacity[name] = Math.max(capacity[name] || 1, now.capacity[name])
+      // A program first seen now has no earlier reading to compare with.
+      if (!then) continue
+      for (name in now.engine) {
+        if (then.engine[name] === undefined) continue
+        spent[name] = (spent[name] || 0) + Math.max(0, now.engine[name] - then.engine[name])
+      }
+      for (name in now.total) {
+        if (then.total[name] === undefined || then.cycles[name] === undefined || now.cycles[name] === undefined) continue
+        cycles[name] = (cycles[name] || 0) + Math.max(0, now.cycles[name] - then.cycles[name])
+        elapsed[name] = Math.max(elapsed[name] || 0, now.total[name] - then.total[name])
+      }
+    }
+    var busiest = null
+    var engine
+    for (engine in spent) {
+      var share = spent[engine] / (seconds * 1e9 * (capacity[engine] || 1))
+      if (busiest === null || share > busiest) busiest = share
+    }
+    for (engine in cycles) {
+      if (!(elapsed[engine] > 0)) continue
+      var part = cycles[engine] / (elapsed[engine] * (capacity[engine] || 1))
+      if (busiest === null || part > busiest) busiest = part
+    }
+    load[card] = busiest === null ? null : clamp01(busiest)
+  }
+  return load
+}
+
+// `clientLoad` is drmLoad's result, used for cards that give no figure.
+function parseGpus(lines, names, nvidiaLines, clientLoad) {
   var gpus = []
   for (var i = 0; i < lines.length; i++) {
     var f = lines[i].split("|")
     if (f.length < 3 || f[0] === "") continue
     var vendorId = String(f[1]).toLowerCase()
     var busy = num(f[3])
+    if (busy === null && clientLoad && typeof clientLoad[f[0]] === "number") busy = clientLoad[f[0]] * 100
     var temp = num(f[6])
     var power = num(f[7])
     var freq = num(f[8])
@@ -362,6 +473,16 @@ function primaryGpu(gpus) {
     if (!best || gpu.busy > best.busy) best = gpu
   }
   return best
+}
+
+// Whether the bar has anything to show for graphics: some card that reports
+// its load, or would if it were awake. A machine whose only card says
+// nothing (Apple Silicon, a plain virtual machine) gets no GPU item.
+function gpuAvailable(gpus) {
+  for (var i = 0; i < gpus.length; i++) {
+    if (gpus[i].asleep || gpus[i].busy !== null) return true
+  }
+  return false
 }
 
 // ---------------------------------------------------------------- processes
@@ -480,6 +601,9 @@ if (typeof module !== "undefined") {
     parseTemps: parseTemps,
     parseGpus: parseGpus,
     primaryGpu: primaryGpu,
+    parseDrmClients: parseDrmClients,
+    drmLoad: drmLoad,
+    gpuAvailable: gpuAvailable,
     parseTop: parseTop,
     topProcesses: topProcesses,
     bytesParts: bytesParts,

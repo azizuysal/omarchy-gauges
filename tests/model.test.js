@@ -209,3 +209,72 @@ test("percent, durationParts, pushHistory and severity", () => {
   assert.equal(Model.severity(0.75, 0.7, 0.9), 1)
   assert.equal(Model.severity(0.95, 0.7, 0.9), 2)
 })
+
+test("parseTemps keeps the hottest of several cpu sensors", () => {
+  assert.equal(Model.parseTemps(["cpu 41000", "cpu 67500", "cpu 52000"]).cpu, 67.5)
+})
+
+test("gpuName names cards that are not on a PCI bus by their driver", () => {
+  assert.equal(Model.gpuName("asahi", ""), "Apple GPU")
+  assert.equal(Model.gpuName("msm_dpu", ""), "Qualcomm Adreno")
+  assert.equal(Model.gpuName("adreno", ""), "Qualcomm Adreno")
+  assert.equal(Model.gpuName("panthor", ""), "Arm Mali")
+  assert.equal(Model.gpuName("some-new-driver", ""), "GPU")
+})
+
+test("drmLoad adds up what each program used on an i915 card", () => {
+  const frame = (a, b, video) => Model.parseDrmClients([
+    "@ card1", "drm-client-id:\t34", `drm-engine-render:\t${a} ns`, `drm-engine-video:\t${video} ns`, "drm-engine-capacity-video:\t2",
+    // The same client again through a second handle: counted once.
+    "@ card1", "drm-client-id:\t34", `drm-engine-render:\t${a} ns`, `drm-engine-video:\t${video} ns`,
+    "@ card1", "drm-client-id:\t51", `drm-engine-render:\t${b} ns`, "drm-engine-video:\t0 ns"
+  ])
+  const before = frame(1e9, 5e9, 0)
+  // Two seconds later: 0.4 s and 0.6 s of render, 0.8 s of video on two engines.
+  const after = frame(1.4e9, 5.6e9, 0.8e9)
+  assert.equal(Model.drmLoad(null, before, 2).card1, null)
+  assert.ok(Math.abs(Model.drmLoad(before, after, 2).card1 - 0.5) < 1e-9)
+})
+
+test("drmLoad ignores a program first seen this frame and never goes negative", () => {
+  const before = Model.parseDrmClients(["@ card0", "drm-client-id: 1", "drm-engine-gpu: 9000000000 ns"])
+  const after = Model.parseDrmClients([
+    "@ card0", "drm-client-id: 1", "drm-engine-gpu: 8000000000 ns",
+    "@ card0", "drm-client-id: 2", "drm-engine-gpu: 70000000000 ns"
+  ])
+  assert.equal(Model.drmLoad(before, after, 2).card0, 0)
+})
+
+test("drmLoad reads the xe driver's cycle counters", () => {
+  const frame = (cycles, total) => Model.parseDrmClients([
+    "@ card0", "drm-client-id: 7", `drm-cycles-rcs: ${cycles}`, `drm-total-cycles-rcs: ${total}`
+  ])
+  assert.ok(Math.abs(Model.drmLoad(frame(1000, 100000), frame(26000, 200000), 2).card0 - 0.25) < 1e-9)
+})
+
+test("drmLoad is null for a driver that reports no usage", () => {
+  const frame = Model.parseDrmClients(["@ card0", "drm-client-id: 3"])
+  assert.equal(Model.drmLoad(frame, frame, 2).card0, null)
+})
+
+test("parseGpus takes program-reported load for cards with no figure", () => {
+  const gpus = Model.parseGpus(["card1|0x8086|awake||||||1067|1250"], {}, [], { card1: 0.31 })
+  assert.equal(gpus[0].busy, 0.31)
+  assert.equal(Model.primaryGpu(gpus).id, "card1")
+})
+
+test("parseGpus copes with nvidia-smi fields that are not available", () => {
+  const gpus = Model.parseGpus(["card0|nvidia-drm|awake|||||||"], {}, ["0, NVIDIA GB10, 96, [N/A], [N/A], 44, 31.53"])
+  assert.equal(gpus.length, 1)
+  assert.equal(gpus[0].busy, 0.96)
+  assert.equal(gpus[0].vramUsed, null)
+  assert.equal(gpus[0].vramTotal, null)
+  assert.equal(gpus[0].temp, 44)
+})
+
+test("gpuAvailable is false when no card can report load", () => {
+  assert.equal(Model.gpuAvailable([]), false)
+  assert.equal(Model.gpuAvailable(Model.parseGpus(["card0|asahi|awake|||||||"], {}, [])), false)
+  assert.equal(Model.gpuAvailable(Model.parseGpus(["card2|0x1002|asleep"], {}, [])), true)
+  assert.equal(Model.gpuAvailable(Model.parseGpus(["card1|0x8086|awake|||||||"], {}, [], { card1: 0 })), true)
+})

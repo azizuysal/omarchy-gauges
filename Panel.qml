@@ -61,9 +61,10 @@ Panel {
     var chosen = String(setting("display", "Graphs")).toLowerCase()
     return chosen === "percentages" || chosen === "icons" ? chosen : "graphs"
   }
-  // A property of its own so `items` only changes when a card appears or
-  // goes, not on every sample: a new list rebuilds every bar button.
-  readonly property bool hasGpu: stats ? stats.gpus.length > 0 : false
+  // No GPU item on a machine whose graphics report no load. A property of
+  // its own so `items` only changes when that does, not on every sample: a
+  // new list rebuilds every bar button.
+  readonly property bool hasGpu: stats ? stats.gpuAvailable : false
   readonly property var items: {
     var chosen = setting("items", [])
     if (!Array.isArray(chosen) || chosen.length === 0) chosen = allItems

@@ -8,7 +8,8 @@ whatever theme is active.
   average, uptime, and the programs using the most processor.
 - **Memory**: used and cached memory, history, swap, and the programs holding
   the most memory.
-- **GPU**: load, video memory, temperature and power for each card.
+- **GPU**: load for each card, with video memory, temperature and power
+  where the card reports them.
 - **Disk**: space on each volume, read and write activity, and drive
   temperature.
 
@@ -64,27 +65,54 @@ o.bind("SUPER CTRL, M", "System monitor", "omarchy-shell sysmon toggle")
 
 ## What the bar shows
 
-| Reading | Value | Turns the warning colour |
-|---|---|---|
-| CPU | Share of processor time in use | Never |
-| Memory | Memory programs hold, not counting cache | At 90% |
-| GPU | Load of the busiest card that reports it | Never |
-| Disk | Space used on the root filesystem | At 90% |
+| Reading | Drawn as | Value | Turns the warning colour |
+|---|---|---|---|
+| CPU | History graph | Share of processor time in use | Never |
+| Memory | Upright gauge | Memory programs hold, with cache fainter above it | At 90% |
+| GPU | History graph | Load of the busiest card that reports it | Never |
+| Disk | Pie | Space used on the root filesystem | At 90% |
+
+The GPU item is left out on a machine whose graphics report no load.
 
 ## Hardware support
 
-- **AMD graphics**: load, video memory, temperature and power.
-- **Intel graphics**: frequency only. The kernel publishes no load figure
-  without elevated privileges.
-- **NVIDIA graphics**: read through `nvidia-smi` when it is installed. This
-  path has not been tested on real hardware yet; reports are welcome.
+CPU load, memory and disk come from `/proc` and work on any machine Omarchy
+runs on, x86 or ARM, real or virtual. Temperature and graphics depend on what
+the hardware's drivers publish:
+
+| Machine | CPU temperature | GPU |
+|---|---|---|
+| Intel or AMD processor | Yes | See graphics below |
+| Apple Silicon | No: the kernel exposes no processor sensor | No load figure, so no GPU item |
+| Qualcomm Snapdragon | Hottest of the per-core sensors | Load |
+| NVIDIA N1x, GB10 | If a processor thermal zone exists | Load, temperature and power through `nvidia-smi` |
+| Virtual machine | No | Only with a virtual card that reports usage |
+
+| Graphics | What is shown |
+|---|---|
+| AMD | Load, video memory, temperature, power |
+| Intel (`i915`, `xe`) | Load and frequency |
+| NVIDIA | Load, video memory, temperature, power, through `nvidia-smi` |
+| Qualcomm Adreno, Arm Mali and other ARM graphics | Load, where the driver reports usage per program |
+| Apple | Listed in the panel, without load |
+
+**Tested on real hardware:** one Intel laptop with Intel and AMD graphics.
+Everything else in these tables was written from kernel sources and is
+exercised only by tests against made-up machines (`tests/sample.test.js`).
+Reports from other hardware are very welcome.
+
+- Where a driver gives no load figure for the card as a whole (Intel, and
+  ARM graphics), the load is added up from the usage each program reports in
+  `/proc/<pid>/fdinfo`. Only your own programs are visible, so graphics work
+  done by another user's processes is not counted.
 - A discrete card that is powered down is shown as asleep and left alone,
   since reading its sensors would wake it.
-- CPU temperature comes from `coretemp`, `k10temp`, `zenpower` or a thermal
-  zone; drive temperature from `nvme` or `drivetemp`.
-- Drive temperature is read only while the disk panel is open, and then every
-  30 seconds. Asking a drive for it continuously made the keyboard and
-  trackpad stutter on an Apple T2 laptop, where they share a controller.
+- On ARM the panel names the machine ("Apple MacBook Air (M1, 2020)") where
+  x86 names the processor, as `/proc/cpuinfo` carries no model name there.
+- Drive temperature comes from `nvme` or `drivetemp`, and is read only while
+  the disk panel is open, and then every 30 seconds. Asking a drive for it
+  continuously made the keyboard and trackpad stutter on an Apple T2 laptop,
+  where they share a controller.
 
 ## How it works
 
@@ -100,7 +128,7 @@ while the disk panel is open.
 ```bash
 ./dev-install --restart   # copy into ~/.config/omarchy/plugins and reload
 ./dev-install --remove    # take it out again
-node --test tests/        # parsing and arithmetic tests
+node --test tests/        # parsing, arithmetic, and made-up-machine tests
 omarchy plugin validate . # manifest check
 ```
 

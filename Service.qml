@@ -45,6 +45,10 @@ Item {
   // The card the bar item shows: the busiest one that reports its load.
   property var gpu: null
   property var gpuHistory: []
+  // Whether any card reports its load; the bar hides the GPU item otherwise.
+  // Held once true, so a card that goes quiet for a frame does not make the
+  // item blink out; cleared when the set of cards changes.
+  property bool gpuAvailable: false
 
   // ---- disks
   property var filesystems: []
@@ -84,6 +88,7 @@ Item {
   property var _static: ({ cpuModel: "", blocks: [], gpuNames: {} })
   property var _previousCpu: null
   property var _previousDisks: null
+  property var _previousClients: null
   property double _previousUptime: 0
 
   function consume(line) {
@@ -102,6 +107,7 @@ Item {
   function applyStatic(block) {
     _static = Model.parseStatic(block.sections)
     cpuModel = _static.cpuModel
+    gpuAvailable = false
   }
 
   function applyFrame(block) {
@@ -136,8 +142,12 @@ Item {
     }
     _previousDisks = disks
 
-    gpus = Model.parseGpus(sections.gpus || [], _static.gpuNames, sections.nvidia || [])
+    var clients = Model.parseDrmClients(sections.drmclients || [])
+    var clientLoad = Model.drmLoad(_previousClients, clients, seconds)
+    _previousClients = clients
+    gpus = Model.parseGpus(sections.gpus || [], _static.gpuNames, sections.nvidia || [], clientLoad)
     gpu = Model.primaryGpu(gpus)
+    if (Model.gpuAvailable(gpus)) gpuAvailable = true
     gpuHistory = Model.pushHistory(gpuHistory, gpu ? gpu.busy : 0, historyLength)
 
     uptime = block.uptime
@@ -158,6 +168,7 @@ Item {
       root._lines = []
       root._previousCpu = null
       root._previousDisks = null
+      root._previousClients = null
       restart.start()
     }
   }
