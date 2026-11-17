@@ -16,7 +16,8 @@
 #   ...raw lines...
 #   @@end
 #
-# A single "@@static" frame with facts that never change is sent first.
+# A "@@static" frame with facts that rarely change is sent first, and again
+# if a graphics card appears or goes away.
 #
 # Drive temperatures are deliberately not part of the stream. Reading one
 # sends the drive a command, and on some machines (Apple T2 laptops, where the
@@ -98,58 +99,94 @@ if [[ -z $cpu_temp_path ]]; then
 fi
 
 # One entry per graphics card: "<card>|<device dir>|<vendor>|<hwmon dir>".
+#
+# Cards are looked for again whenever the set of them changes, not just once:
+# the shell can start before a graphics driver has finished loading (a
+# discrete card on a hybrid laptop routinely registers seconds later), and a
+# card found late would otherwise stay missing until the next restart.
 gpus=()
-for card in /sys/class/drm/card[0-9]*; do
-  [[ ${card##*/} =~ ^card[0-9]+$ ]] || continue
-  device="$card/device"
-  [[ -r $device/vendor ]] || continue
-  gpu_hwmon=""
-  for candidate in "$device"/hwmon/hwmon*; do
-    [[ -d $candidate ]] && gpu_hwmon="$candidate" && break
+gpu_signature=""
+
+# Everything the card list is built from, as one string. Globbing is a
+# builtin, so checking it every frame costs no forks.
+# The result is left in gpu_scan_result rather than printed, so reading it
+# needs no subshell.
+gpu_scan_result=""
+gpu_scan() {
+  local paths=(/sys/class/drm/card[0-9]*/device/vendor /sys/class/drm/card[0-9]*/device/hwmon/hwmon*)
+  gpu_scan_result="${paths[*]}"
+}
+
+discover_gpus() {
+  local card device gpu_hwmon candidate
+  gpus=()
+  for card in /sys/class/drm/card[0-9]*; do
+    [[ ${card##*/} =~ ^card[0-9]+$ ]] || continue
+    device="$card/device"
+    [[ -r $device/vendor ]] || continue
+    gpu_hwmon=""
+    for candidate in "$device"/hwmon/hwmon*; do
+      [[ -d $candidate ]] && gpu_hwmon="$candidate" && break
+    done
+    gpus+=("${card##*/}|$device|$(first_line "$device/vendor")|$gpu_hwmon")
   done
-  gpus+=("${card##*/}|$device|$(first_line "$device/vendor")|$gpu_hwmon")
-done
+}
+
+gpu_scan
+gpu_signature="$gpu_scan_result"
+discover_gpus
 
 have_nvidia_smi=0
 command -v nvidia-smi >/dev/null 2>&1 && have_nvidia_smi=1
 
 # ------------------------------------------------------------------- static
 
-echo "@@static"
-echo "@@section cpuinfo"
-if [[ -r /proc/cpuinfo ]]; then
-  while IFS= read -r line; do
-    if [[ $line == "model name"* || $line == "Hardware"* || $line == "Model"* ]]; then
-      echo "$line"
-      break
+emit_static() {
+  echo "@@static"
+  echo "@@section cpuinfo"
+  if [[ -r /proc/cpuinfo ]]; then
+    while IFS= read -r line; do
+      if [[ $line == "model name"* || $line == "Hardware"* || $line == "Model"* ]]; then
+        echo "$line"
+        break
+      fi
+    done </proc/cpuinfo
+  fi
+  echo "@@section blocks"
+  for block in /sys/block/*; do
+    [[ -d $block ]] && echo "${block##*/}"
+  done
+  echo "@@section gpunames"
+  for gpu in "${gpus[@]}"; do
+    IFS='|' read -r card device vendor _ <<<"$gpu"
+    slot=""
+    if [[ -r $device/uevent ]]; then
+      while IFS='=' read -r key value; do
+        [[ $key == PCI_SLOT_NAME ]] && slot="$value"
+      done <"$device/uevent"
     fi
-  done </proc/cpuinfo
-fi
-echo "@@section blocks"
-for block in /sys/block/*; do
-  [[ -d $block ]] && echo "${block##*/}"
-done
-echo "@@section gpunames"
-for gpu in "${gpus[@]}"; do
-  IFS='|' read -r card device vendor _ <<<"$gpu"
-  slot=""
-  if [[ -r $device/uevent ]]; then
-    while IFS='=' read -r key value; do
-      [[ $key == PCI_SLOT_NAME ]] && slot="$value"
-    done <"$device/uevent"
-  fi
-  label=""
-  if [[ -n $slot ]] && command -v lspci >/dev/null 2>&1; then
-    label=$(lspci -s "$slot" 2>/dev/null | head -n 1)
-    label="${label#*: }"
-  fi
-  echo "$card|$vendor|$label"
-done
-echo "@@end"
+    label=""
+    if [[ -n $slot ]] && command -v lspci >/dev/null 2>&1; then
+      label=$(lspci -s "$slot" 2>/dev/null | head -n 1)
+      label="${label#*: }"
+    fi
+    echo "$card|$vendor|$label"
+  done
+  echo "@@end"
+}
+
+emit_static
 
 # --------------------------------------------------------------------- loop
 
 while :; do
+  gpu_scan
+  if [[ $gpu_scan_result != "$gpu_signature" ]]; then
+    gpu_signature="$gpu_scan_result"
+    discover_gpus
+    emit_static || exit 0
+  fi
+
   read -r uptime _ </proc/uptime || uptime=0
   echo "@@frame $uptime" || exit 0
 
