@@ -136,8 +136,21 @@ Reports from other hardware are very welcome.
   ARM graphics), the load is added up from the usage each program reports in
   `/proc/<pid>/fdinfo`. Only your own programs are visible, so graphics work
   done by another user's processes is not counted.
-- The network panel's list of programs is built from the byte counts of TCP
-  connections (`ss`), read only while the panel is open.
+- The network panel's list of programs comes from
+  [nethogs](https://github.com/raboof/nethogs) when it is installed and
+  allowed to capture packets without root, which covers every program and
+  both TCP and UDP:
+
+  ```bash
+  sudo pacman -S nethogs
+  sudo setcap "cap_net_admin,cap_net_raw,cap_dac_read_search,cap_sys_ptrace+pe" /usr/bin/nethogs
+  ```
+
+  The second command lets any user on the machine run nethogs, and has to be
+  repeated after nethogs is updated. Without it the list falls back to the
+  TCP connections of your own programs (`ss`), which misses UDP traffic such
+  as video calls and much of a browser's. Either way it is read only while
+  the network panel is open.
 - Network speed counts interfaces with a real device behind them, so VPN
   and loopback traffic is not counted twice.
 - A discrete card that is powered down is shown as asleep and left alone,

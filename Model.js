@@ -258,20 +258,21 @@ function diskRates(previous, current, seconds) {
 // ------------------------------------------------------------------ network
 
 // Byte counters per interface, from sample.sh's "net" section: each line is
-// "<p|v> <link state> <line of /proc/net/dev>".
+// "<p|v> <link state> <wifi|wired> <line of /proc/net/dev>".
 function parseNet(lines) {
   var interfaces = {}
   for (var i = 0; i < lines.length; i++) {
-    var match = lines[i].match(/^([pv])\s+(\S+)\s+([^:]+):\s*(.*)$/)
+    var match = lines[i].match(/^([pv])\s+(\S+)\s+(wifi|wired)\s+([^:]+):\s*(.*)$/)
     if (!match) continue
-    var fields = match[4].trim().split(/\s+/)
+    var fields = match[5].trim().split(/\s+/)
     if (fields.length < 9) continue
     var received = num(fields[0])
     var sent = num(fields[8])
     if (received === null || sent === null) continue
-    interfaces[match[3].trim()] = {
+    interfaces[match[4].trim()] = {
       physical: match[1] === "p",
       state: match[2],
+      wireless: match[3] === "wifi",
       received: received,
       sent: sent
     }
@@ -303,7 +304,7 @@ function netRates(previous, current, seconds) {
     rates.down += down
     rates.up += up
     rates.interfaces.push({
-      name: name, state: now.state, down: down, up: up,
+      name: name, state: now.state, wireless: now.wireless, down: down, up: up,
       received: now.received, sent: now.sent
     })
   }
@@ -356,6 +357,35 @@ function socketRates(previous, current, seconds, limit) {
     if (!programs[now.name]) programs[now.name] = { name: now.name, down: 0, up: 0 }
     programs[now.name].down += down / seconds
     programs[now.name].up += up / seconds
+  }
+  var rows = Object.keys(programs).map(function(name) { return programs[name] })
+  rows.sort(function(a, b) { return (b.down + b.up) - (a.down + a.up) || (a.name < b.name ? -1 : 1) })
+  return limit > 0 ? rows.slice(0, limit) : rows
+}
+
+// The same list from nethogs, where it is installed and allowed to capture
+// packets: it sees every program's traffic, UDP included. Its trace mode
+// prints, per refresh, lines of
+//   "<command line>/<pid>/<uid>\t<sent kB/s>\t<received kB/s>"
+// and two catch-all lines, "unknown TCP/0/0" and "unknown UDP/0/0", for
+// packets it could not tie to a program.
+function parseNethogs(lines, limit) {
+  var programs = {}
+  for (var i = 0; i < lines.length; i++) {
+    var fields = lines[i].split("\t")
+    if (fields.length < 3) continue
+    var up = num(fields[fields.length - 2])
+    var down = num(fields[fields.length - 1])
+    var owner = fields.slice(0, fields.length - 2).join("\t").match(/^(.*)\/(\d+)\/(\d+)$/)
+    if (!owner || up === null || down === null) continue
+    if (up <= 0 && down <= 0) continue
+    var unknown = owner[2] === "0" && /^unknown (TCP|UDP)$/.test(owner[1])
+    // The program is the first word of the command line, without its folder.
+    var name = unknown ? owner[1] : owner[1].split(/\s+/)[0].replace(/^.*\//, "")
+    if (name === "") continue
+    if (!programs[name]) programs[name] = { name: name, down: 0, up: 0, unknown: unknown }
+    programs[name].down += down * 1024
+    programs[name].up += up * 1024
   }
   var rows = Object.keys(programs).map(function(name) { return programs[name] })
   rows.sort(function(a, b) { return (b.down + b.up) - (a.down + a.up) || (a.name < b.name ? -1 : 1) })
@@ -716,6 +746,7 @@ if (typeof module !== "undefined") {
     parseNet: parseNet,
     netRates: netRates,
     rateCompact: rateCompact,
+    parseNethogs: parseNethogs,
     parseSockets: parseSockets,
     socketRates: socketRates,
     parseDf: parseDf,

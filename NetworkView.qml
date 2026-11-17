@@ -10,13 +10,26 @@ Column {
   // The interfaces with a link, which is where any traffic is.
   readonly property var connected: stats.netInterfaces.filter(function(entry) { return entry.state !== "down" })
 
+  function kindOf(entry) {
+    return ctx.strings.t(entry.wireless ? "network.wifi" : "network.ethernet")
+  }
+
   spacing: Style.space(14)
 
   Hero {
     ctx: root.ctx
     icon: root.ctx.icons.network
     title: root.ctx.strings.t("network.title")
-    caption: root.connected.map(function(entry) { return entry.name }).join("  ")
+    // The kind of link doing the work: of those that are up, the one that
+    // has carried the most.
+    caption: {
+      var busiest = null
+      for (var i = 0; i < root.connected.length; i++) {
+        var entry = root.connected[i]
+        if (!busiest || entry.received + entry.sent > busiest.received + busiest.sent) busiest = entry
+      }
+      return busiest ? root.kindOf(busiest) : ""
+    }
     value: root.stats.netReady ? root.ctx.rateText(root.stats.netDown + root.stats.netUp) : ""
   }
 
@@ -47,43 +60,6 @@ Column {
       ctx: root.ctx
       label: root.ctx.strings.t("network.upload")
       value: root.ctx.rateText(root.stats.netUp)
-    }
-  }
-
-  PanelSeparator { foreground: root.ctx.foreground }
-
-  // Who the traffic belongs to.
-  Column {
-    width: parent.width
-    spacing: Style.space(8)
-
-    PanelSectionHeader {
-      text: root.ctx.strings.t("network.top")
-      foreground: root.ctx.foreground
-      fontFamily: root.ctx.fontFamily
-    }
-
-    Column {
-      width: parent.width
-      spacing: Style.spacing.labelGap
-
-      Repeater {
-        model: root.stats.netPrograms
-
-        StatRow {
-          required property var modelData
-          ctx: root.ctx
-          label: modelData.name
-          value: root.ctx.strings.t("network.updown").arg(root.ctx.rateText(modelData.down)).arg(root.ctx.rateText(modelData.up))
-        }
-      }
-
-      Label {
-        visible: root.stats.netPrograms.length === 0
-        ctx: root.ctx
-        dim: true
-        text: root.ctx.strings.t(root.stats.netProgramsReady ? "network.quiet" : "common.measuring")
-      }
     }
   }
 
@@ -120,7 +96,7 @@ Column {
 
         StatRow {
           ctx: root.ctx
-          label: entry.modelData.name
+          label: root.kindOf(entry.modelData) + " · " + entry.modelData.name
           value: entry.down ? root.ctx.strings.t("network.down")
             : root.ctx.strings.t("network.updown").arg(root.ctx.rateText(entry.modelData.down)).arg(root.ctx.rateText(entry.modelData.up))
         }
@@ -131,6 +107,46 @@ Column {
           label: root.ctx.strings.t("network.sinceBoot")
           value: root.ctx.strings.t("network.updown").arg(root.ctx.bytesText(entry.modelData.received)).arg(root.ctx.bytesText(entry.modelData.sent))
         }
+      }
+    }
+  }
+
+  PanelSeparator { foreground: root.ctx.foreground }
+
+  // Who the traffic belongs to.
+  Column {
+    width: parent.width
+    spacing: Style.space(8)
+
+    PanelSectionHeader {
+      text: root.ctx.strings.t("network.top")
+      foreground: root.ctx.foreground
+      fontFamily: root.ctx.fontFamily
+    }
+
+    Column {
+      width: parent.width
+      spacing: Style.spacing.labelGap
+
+      Repeater {
+        model: root.stats.netPrograms
+
+        StatRow {
+          required property var modelData
+          ctx: root.ctx
+          // Packets nethogs could not tie to a program are background
+          // chatter (name lookups, discovery) unless there are a lot of them.
+          visible: !modelData.unknown || modelData.down + modelData.up >= 16384
+          label: modelData.unknown ? root.ctx.strings.t("network.unidentified") : modelData.name
+          value: root.ctx.strings.t("network.updown").arg(root.ctx.rateText(modelData.down)).arg(root.ctx.rateText(modelData.up))
+        }
+      }
+
+      Label {
+        visible: root.stats.netPrograms.length === 0
+        ctx: root.ctx
+        dim: true
+        text: root.ctx.strings.t(root.stats.netProgramsReady ? "network.quiet" : "common.measuring")
       }
     }
   }

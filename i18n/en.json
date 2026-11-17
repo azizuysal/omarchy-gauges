@@ -49,5 +49,8 @@
   "network.sinceBoot": "Since startup",
   "network.updown": "↓ %1  ↑ %2",
   "network.top": "Top programs",
-  "network.quiet": "Nothing is using the network"
+  "network.quiet": "Nothing is using the network",
+  "network.wifi": "Wi-Fi",
+  "network.ethernet": "Ethernet",
+  "network.unidentified": "Unidentified"
 }

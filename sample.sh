@@ -393,7 +393,8 @@ while :; do
 
   # Each interface's counters, marked "p" when a real device stands behind
   # it (and "v" for loopback, VPNs, bridges and the like, which only carry
-  # traffic a real one already counted) and with its link state.
+  # traffic a real one already counted), with its link state and whether it
+  # is wireless.
   echo "@@section net"
   if [[ -r $proc/net/dev ]]; then
     while IFS= read -r line; do
@@ -402,8 +403,10 @@ while :; do
       name="${name//[[:space:]]/}"
       kind=v
       [[ -e $sys/class/net/$name/device ]] && kind=p
+      type=wired
+      [[ -d $sys/class/net/$name/wireless || -e $sys/class/net/$name/phy80211 ]] && type=wifi
       state=$(first_line "$sys/class/net/$name/operstate")
-      echo "$kind ${state:-unknown} $line"
+      echo "$kind ${state:-unknown} $type $line"
     done <"$proc/net/dev"
   fi
 

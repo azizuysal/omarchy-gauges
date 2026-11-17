@@ -70,6 +70,11 @@ Item {
   // The programs moving the most data, and whether a first reading is in.
   property var netPrograms: []
   property bool netProgramsReady: false
+  // What the list is read with: "nethogs" where it is installed and allowed
+  // to capture packets, which sees every program's traffic; otherwise "ss",
+  // which sees only the TCP connections of the user's own programs. Empty
+  // until the first panel opens and it is found out.
+  property string netTool: ""
   // How many open network panels want that list.
   property int netWatchers: 0
   function watchNetPrograms(on) {
@@ -77,16 +82,26 @@ Item {
   }
   onNetWatchersChanged: {
     if (netWatchers > 0) {
-      if (!socketProc.running) socketProc.running = true
+      if (netTool === "") nethogsProbe.running = true
+      else if (netTool === "ss" && !socketProc.running) socketProc.running = true
     } else {
       // Stale by the time anyone looks again.
       _previousSockets = null
+      _nethogsLines = []
       netPrograms = []
       netProgramsReady = false
     }
   }
   property var _previousSockets: null
   property double _previousSocketsAt: 0
+  property var _nethogsLines: []
+
+  function consumeNethogs(line) {
+    if (line === "Refreshing:") { _nethogsLines = []; nethogsBatch.restart(); return }
+    if (line.indexOf("\t") === -1) return
+    _nethogsLines.push(line)
+    nethogsBatch.restart()
+  }
 
   // ---- processes, grouped by program
   property var topByCpu: []
@@ -254,7 +269,40 @@ Item {
     }
   }
 
+  // Whether nethogs can be used: one refresh of it, which fails at once if
+  // it is missing or lacks the capabilities to capture.
+  Process {
+    id: nethogsProbe
+    command: ["sh", "-c", "exec nethogs -t -c 1 -d 1 >/dev/null 2>&1"]
+    onExited: function(exitCode) {
+      root.netTool = exitCode === 0 ? "nethogs" : "ss"
+      if (root.netTool === "ss" && root.netWatchers > 0) socketProc.running = true
+    }
+  }
+
   // Which programs own the traffic. Only while a network panel is open.
+  Process {
+    id: nethogsProc
+    command: ["nethogs", "-t", "-C", "-d", "2"]
+    environment: ({ LC_ALL: "C" })
+    running: root.netWatchers > 0 && root.netTool === "nethogs"
+    stdout: SplitParser {
+      onRead: function(line) { root.consumeNethogs(line) }
+    }
+  }
+
+  // A refresh is a burst of lines with no end marker; it is complete when
+  // the lines stop.
+  Timer {
+    id: nethogsBatch
+    interval: 150
+    onTriggered: {
+      if (root.netWatchers === 0) return
+      root.netPrograms = Model.parseNethogs(root._nethogsLines, 6)
+      root.netProgramsReady = true
+    }
+  }
+
   Process {
     id: socketProc
     command: ["ss", "-tinpHO"]
@@ -266,7 +314,7 @@ Item {
         var now = Date.now()
         var sockets = Model.parseSockets(text)
         if (root._previousSockets) {
-          root.netPrograms = Model.socketRates(root._previousSockets, sockets, (now - root._previousSocketsAt) / 1000, 5)
+          root.netPrograms = Model.socketRates(root._previousSockets, sockets, (now - root._previousSocketsAt) / 1000, 6)
           root.netProgramsReady = true
         }
         root._previousSockets = sockets
@@ -277,7 +325,7 @@ Item {
 
   Timer {
     interval: 2000
-    running: root.netWatchers > 0
+    running: root.netWatchers > 0 && root.netTool === "ss"
     repeat: true
     onTriggered: if (!socketProc.running) socketProc.running = true
   }

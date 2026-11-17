@@ -281,10 +281,10 @@ test("gpuAvailable is false when no card can report load", () => {
 
 test("netRates counts real interfaces and leaves out loopback and VPNs", () => {
   const frame = (wifi, vpn) => Model.parseNet([
-    "v unknown     lo:  377036    3976    0    0    0     0          0         0   377036    3976    0    0    0     0       0          0",
-    `p up wlp5s0: ${wifi}  407227    0   10    0     0          0    101870 ${wifi / 2}  179454    0    0    0     0       0          0`,
-    "p down enp69s0u1: 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0",
-    `v unknown tailscale0: ${vpn} 119 0 0 0 0 0 0 ${vpn} 206 0 0 0 0 0 0`
+    "v unknown wired     lo:  377036    3976    0    0    0     0          0         0   377036    3976    0    0    0     0       0          0",
+    `p up wifi wlp5s0: ${wifi}  407227    0   10    0     0          0    101870 ${wifi / 2}  179454    0    0    0     0       0          0`,
+    "p down wired enp69s0u1: 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0",
+    `v unknown wired tailscale0: ${vpn} 119 0 0 0 0 0 0 ${vpn} 206 0 0 0 0 0 0`
   ])
   assert.equal(Model.netRates(null, frame(1000, 500), 2).down, 0)
   const rates = Model.netRates(frame(1000000, 500), frame(1400000, 900000), 2)
@@ -292,10 +292,11 @@ test("netRates counts real interfaces and leaves out loopback and VPNs", () => {
   assert.equal(rates.up, 100000)
   assert.deepEqual(rates.interfaces.map(entry => entry.name), ["enp69s0u1", "wlp5s0"])
   assert.equal(rates.interfaces[0].state, "down")
+  assert.deepEqual(rates.interfaces.map(entry => entry.wireless), [false, true])
 })
 
 test("netRates falls back to every interface but loopback when none is real", () => {
-  const frame = bytes => Model.parseNet(["v unknown lo: 5 0 0 0 0 0 0 0 5 0 0 0 0 0 0 0", `v up eth0: ${bytes} 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0`])
+  const frame = bytes => Model.parseNet(["v unknown wired lo: 5 0 0 0 0 0 0 0 5 0 0 0 0 0 0 0", `v up wired eth0: ${bytes} 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0`])
   assert.equal(Model.netRates(frame(0), frame(3000), 3).down, 1000)
 })
 
@@ -332,4 +333,20 @@ test("socketRates attributes TCP traffic to the programs that own it", () => {
   ])
   assert.deepEqual(Model.socketRates(null, after, 2, 5), [])
   assert.equal(Model.socketRates(before, after, 2, 1).length, 1)
+})
+
+test("parseNethogs names each program and adds up its processes", () => {
+  const rows = Model.parseNethogs([
+    "unknown UDP/0/0\t1.5\t0.5",
+    "/home/me/.config/Claude/claude-code/2.1/claude/10213/1000\t0.25\t2",
+    "/home/me/.config/Claude/claude-code/2.1/claude/13618/1000\t0.25\t0",
+    "/usr/lib/chatgpt/ChatGPT --type=utility --user-data-dir=/home/me/.config/Codex --x=a/b/8253/1000\t0\t100",
+    "/usr/bin/idle/55/1000\t0\t0",
+    "unknown TCP/0/0\t0\t0"
+  ], 5)
+  assert.deepEqual(rows, [
+    { name: "ChatGPT", down: 102400, up: 0, unknown: false },
+    { name: "claude", down: 2048, up: 512, unknown: false },
+    { name: "unknown UDP", down: 512, up: 1536, unknown: true }
+  ])
 })
