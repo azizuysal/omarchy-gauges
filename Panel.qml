@@ -5,8 +5,8 @@ import qs.Commons as Commons
 import qs.Ui
 import "Model.js" as Model
 
-// The bar item: one icon per metric with a small graph (or the percentage)
-// beside it, each opening the same popup on its own detail view. Readings come from Service.qml, which the
+// The bar item: a small graph per metric (or its icon, with or without the
+// percentage), each opening the same popup on its own detail view. Readings come from Service.qml, which the
 // shell runs once however many bars (monitors) show this widget.
 Panel {
   id: root
@@ -196,7 +196,7 @@ Panel {
 
   // What the small graph beside an icon draws; see BarGraphic.
   function graphicKind(item) {
-    return item === "memory" ? "pie" : item === "disk" ? "level" : "history"
+    return item === "memory" ? "column" : item === "disk" ? "level" : "history"
   }
 
   function graphicValues(item) {
@@ -204,7 +204,7 @@ Panel {
     return item === "cpu" ? stats.cpuHistory : item === "gpu" ? stats.gpuHistory : []
   }
 
-  // The fainter second slice: memory the kernel is only using as cache.
+  // The fainter second part: memory the kernel is only using as cache.
   function graphicExtra(item) {
     if (item !== "memory" || !stats || !(stats.memory.total > 0)) return 0
     return stats.memory.cache / stats.memory.total
@@ -250,12 +250,11 @@ Panel {
         readonly property color ink: active ? root.urgent : root.foreground
 
         bar: root.bar
-        // With a graph the icon is drawn below, beside it, rather than by the
-        // button, which would centre it in the slot.
+        // A graph stands in for the icon.
         text: graphed ? "" : root.icons[modelData]
         hasVisualContent: true
         labelText: root.display === "percentages" ? root.barLabel(modelData) : ""
-        slotSize: graphed ? Style.bar.iconSlot + graphic.implicitWidth + Style.space(4)
+        slotSize: graphed ? graphic.implicitWidth + Style.bar.iconSlot - Style.bar.iconCanvas
           : root.display === "percentages" && known ? root.labelSlot
           : Style.bar.iconSlot
         active: root.alarming(modelData)
@@ -270,31 +269,16 @@ Panel {
           }
         }
 
-        Row {
+        BarGraphic {
+          id: graphic
           visible: button.graphed
           anchors.centerIn: parent
-          spacing: Style.space(4)
           scale: button.pressScale
-
-          BarGraphic {
-            id: graphic
-            anchors.verticalCenter: parent.verticalCenter
-            kind: root.graphicKind(button.modelData)
-            color: button.ink
-            values: root.graphicValues(button.modelData)
-            fraction: Math.max(0, root.reading(button.modelData))
-            extra: root.graphicExtra(button.modelData)
-          }
-
-          OpticalGlyph {
-            width: Style.bar.iconCanvas
-            height: Style.bar.iconCanvas
-            text: root.icons[button.modelData]
-            fontFamily: root.fontFamily
-            fontSize: Style.bar.iconFont
-            paintedSize: Style.bar.iconSize
-            color: button.ink
-          }
+          kind: root.graphicKind(button.modelData)
+          color: button.ink
+          values: root.graphicValues(button.modelData)
+          fraction: Math.max(0, root.reading(button.modelData))
+          extra: root.graphicExtra(button.modelData)
         }
       }
     }

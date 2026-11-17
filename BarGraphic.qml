@@ -4,9 +4,9 @@ import qs.Commons
 // The small picture a bar item shows in place of a number:
 //
 //   "history"  the last few readings as a bar graph (processor, graphics)
-//   "pie"      how much of a whole is taken, with an optional fainter second
-//              slice after it (memory in use, then cache)
-//   "level"    a capacity bar (disk space)
+//   "column"   an upright gauge filling from the bottom, with an optional
+//              fainter second part above it (memory in use, then cache)
+//   "level"    a capacity bar filling from the side (disk space)
 //
 // Sized from the bar's icon height so it follows the bar's scale.
 Canvas {
@@ -16,7 +16,8 @@ Canvas {
   property color color: "white"
   // "history": readings from 0 to 1, oldest first.
   property var values: []
-  // "pie" and "level": the solid part, and for the pie a fainter part after it.
+  // "column" and "level": the solid part, and for the column a fainter part
+  // after it.
   property real fraction: 0
   property real extra: 0
 
@@ -28,7 +29,7 @@ Canvas {
   implicitHeight: Style.bar.iconSize
   implicitWidth: kind === "history" ? bars * barWidth + (bars - 1) * barGap
     : kind === "level" ? 20 * unit
-    : implicitHeight
+    : 7 * unit
   width: implicitWidth
   height: implicitHeight
 
@@ -64,36 +65,25 @@ Canvas {
     }
   }
 
-  function paintPie(context) {
-    var cx = width / 2
-    var cy = height / 2
-    var radius = Math.min(width, height) / 2
-    var top = -Math.PI / 2
-    var used = clamp(fraction)
-    var more = Math.min(1 - used, clamp(extra))
-
-    context.beginPath()
-    context.arc(cx, cy, radius, 0, Math.PI * 2)
+  function paintColumn(context) {
+    var used = clamp(fraction) * height
+    var more = Math.min(1 - clamp(fraction), clamp(extra)) * height
+    slab(context, 0, 0, width, height)
     context.fillStyle = tint(0.18)
     context.fill()
-
+    // Clipped to the outline so the fill keeps the rounded corners.
+    context.save()
+    slab(context, 0, 0, width, height)
+    context.clip()
     if (more > 0) {
-      context.beginPath()
-      context.moveTo(cx, cy)
-      context.arc(cx, cy, radius, top + used * Math.PI * 2, top + (used + more) * Math.PI * 2)
-      context.closePath()
       context.fillStyle = tint(0.4)
-      context.fill()
+      context.fillRect(0, height - used - more, width, more)
     }
-
     if (used > 0) {
-      context.beginPath()
-      context.moveTo(cx, cy)
-      context.arc(cx, cy, radius, top, top + used * Math.PI * 2)
-      context.closePath()
       context.fillStyle = tint(1)
-      context.fill()
+      context.fillRect(0, height - Math.max(unit, used), width, Math.max(unit, used))
     }
+    context.restore()
   }
 
   // Corners only slightly rounded: with fully round ends a nearly empty bar
@@ -127,7 +117,7 @@ Canvas {
     var context = getContext("2d")
     context.reset()
     if (kind === "history") paintHistory(context)
-    else if (kind === "pie") paintPie(context)
+    else if (kind === "column") paintColumn(context)
     else paintLevel(context)
   }
 }

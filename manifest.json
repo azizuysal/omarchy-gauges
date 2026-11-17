@@ -60,14 +60,14 @@
       {
         "key": "display",
         "type": "enum",
-        "label": "Beside each icon",
+        "label": "Show readings as",
         "options": [
           "Graphs",
           "Percentages",
           "Icons"
         ],
         "defaultValue": "Graphs",
-        "description": "Graphs draws a small history graph for CPU and GPU, a pie for memory and a capacity bar for disk. Percentages shows the number instead. Icons shows the icon alone."
+        "description": "Graphs draws a small history graph for CPU and GPU, an upright gauge for memory and a capacity bar for disk. Percentages shows each icon with its number. Icons shows the icon alone."
       }
     ]
   }
