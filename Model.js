@@ -310,6 +310,58 @@ function netRates(previous, current, seconds) {
   return rates
 }
 
+// Which programs the traffic belongs to, from `ss -tinpHO`: one line per TCP
+// connection with the bytes it has carried and, for connections of the
+// user's own programs, who holds it. That is all an unprivileged user can
+// see: UDP (which includes QUIC, so much of a browser's traffic) carries no
+// byte counts, and other users' connections carry no name.
+//
+// Returns { "<local> <remote>": { name, sent, received } }.
+function parseSockets(text) {
+  var sockets = {}
+  var lines = String(text || "").split("\n")
+  for (var i = 0; i < lines.length; i++) {
+    var line = lines[i]
+    var owner = line.match(/users:\(\("([^"]*)"/)
+    if (!owner) continue
+    var fields = line.trim().split(/\s+/)
+    if (fields.length < 5) continue
+    var local = fields[3]
+    var remote = fields[4]
+    // Traffic to this machine itself never touches the network.
+    if (/^(127\.|\[::1\]|\[::ffff:127\.)/.test(remote)) continue
+    var sent = line.match(/\bbytes_acked:(\d+)/)
+    var received = line.match(/\bbytes_received:(\d+)/)
+    sockets[local + " " + remote] = {
+      name: owner[1],
+      sent: sent ? Number(sent[1]) : 0,
+      received: received ? Number(received[1]) : 0
+    }
+  }
+  return sockets
+}
+
+// Bytes a second down and up per program between two readings, busiest
+// first. A connection opened since the last reading did all its work in
+// between, so all of it counts.
+function socketRates(previous, current, seconds, limit) {
+  if (!previous || !current || !(seconds > 0)) return []
+  var programs = {}
+  for (var key in current) {
+    var now = current[key]
+    var then = previous[key]
+    var down = Math.max(0, now.received - (then ? then.received : 0))
+    var up = Math.max(0, now.sent - (then ? then.sent : 0))
+    if (down === 0 && up === 0) continue
+    if (!programs[now.name]) programs[now.name] = { name: now.name, down: 0, up: 0 }
+    programs[now.name].down += down / seconds
+    programs[now.name].up += up / seconds
+  }
+  var rows = Object.keys(programs).map(function(name) { return programs[name] })
+  rows.sort(function(a, b) { return (b.down + b.up) - (a.down + a.up) || (a.name < b.name ? -1 : 1) })
+  return limit > 0 ? rows.slice(0, limit) : rows
+}
+
 // A rate in at most four characters, for the bar: "0K", "87K", "1.2M", "34M".
 function rateCompact(bytesPerSecond) {
   var value = Math.max(0, bytesPerSecond || 0) / 1024
@@ -664,6 +716,8 @@ if (typeof module !== "undefined") {
     parseNet: parseNet,
     netRates: netRates,
     rateCompact: rateCompact,
+    parseSockets: parseSockets,
+    socketRates: socketRates,
     parseDf: parseDf,
     primaryFilesystem: primaryFilesystem,
     parseTemps: parseTemps,

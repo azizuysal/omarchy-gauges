@@ -145,8 +145,22 @@ Panel {
     watching = wantsProcesses
   }
   onWantsProcessesChanged: syncWatch()
-  onStatsChanged: { watching = false; syncWatch() }
-  Component.onDestruction: if (watching && stats) stats.watchProcesses(false)
+
+  // Likewise the list of programs using the network.
+  readonly property bool wantsNetPrograms: opened && active === "network"
+  property bool watchingNet: false
+  function syncNetWatch() {
+    if (!stats || wantsNetPrograms === watchingNet) return
+    stats.watchNetPrograms(wantsNetPrograms)
+    watchingNet = wantsNetPrograms
+  }
+  onWantsNetProgramsChanged: syncNetWatch()
+
+  onStatsChanged: { watching = false; watchingNet = false; syncWatch(); syncNetWatch() }
+  Component.onDestruction: {
+    if (watching && stats) stats.watchProcesses(false)
+    if (watchingNet && stats) stats.watchNetPrograms(false)
+  }
 
   // ---- shared look, read by the views as `ctx`
   readonly property color foreground: bar ? bar.foreground : Commons.Color.foreground

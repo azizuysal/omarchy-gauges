@@ -10,6 +10,12 @@ Column {
   // The interfaces with a link, which is where any traffic is.
   readonly property var connected: stats.netInterfaces.filter(function(entry) { return entry.state !== "down" })
 
+  readonly property real unattributed: {
+    var listed = 0
+    for (var i = 0; i < stats.netPrograms.length; i++) listed += stats.netPrograms[i].down + stats.netPrograms[i].up
+    return Math.max(0, stats.netDown + stats.netUp - listed)
+  }
+
   spacing: Style.space(14)
 
   Hero {
@@ -47,6 +53,61 @@ Column {
       ctx: root.ctx
       label: root.ctx.strings.t("network.upload")
       value: root.ctx.rateText(root.stats.netUp)
+    }
+  }
+
+  PanelSeparator { foreground: root.ctx.foreground }
+
+  // Who the traffic belongs to, as far as an ordinary user can be told: see
+  // Model.parseSockets for what is and is not visible.
+  Column {
+    width: parent.width
+    spacing: Style.space(8)
+
+    PanelSectionHeader {
+      text: root.ctx.strings.t("network.top")
+      foreground: root.ctx.foreground
+      fontFamily: root.ctx.fontFamily
+    }
+
+    Column {
+      width: parent.width
+      spacing: Style.spacing.labelGap
+
+      Repeater {
+        model: root.stats.netPrograms
+
+        StatRow {
+          required property var modelData
+          ctx: root.ctx
+          label: modelData.name
+          value: root.ctx.strings.t("network.updown").arg(root.ctx.rateText(modelData.down)).arg(root.ctx.rateText(modelData.up))
+        }
+      }
+
+      // What the interfaces carried that no listed program accounts for.
+      StatRow {
+        visible: root.stats.netProgramsReady && root.unattributed >= 1024
+        ctx: root.ctx
+        label: root.ctx.strings.t("network.other")
+        value: root.ctx.rateText(root.unattributed)
+      }
+
+      Label {
+        visible: root.stats.netPrograms.length === 0 && !(root.stats.netProgramsReady && root.unattributed >= 1024)
+        ctx: root.ctx
+        dim: true
+        text: root.ctx.strings.t(root.stats.netProgramsReady ? "network.quiet" : "common.measuring")
+      }
+    }
+
+    Label {
+      ctx: root.ctx
+      dim: true
+      width: parent.width
+      wrapMode: Text.WordWrap
+      font.pixelSize: Style.font.caption
+      text: root.ctx.strings.t("network.topNote")
     }
   }
 

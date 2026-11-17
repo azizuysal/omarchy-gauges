@@ -306,3 +306,30 @@ test("rateCompact fits a rate in four characters", () => {
   assert.equal(Model.rateCompact(1024 * 1024 * 34), "34M")
   assert.equal(Model.rateCompact(1023 * 1024), "1.0M")
 })
+
+test("socketRates attributes TCP traffic to the programs that own it", () => {
+  const line = (local, remote, owner, acked, received) =>
+    `ESTAB 0 0 ${local} ${remote} ${owner ? `users:(("${owner}",pid=10,fd=3))` : ""} bbr wscale:7,10 bytes_sent:${acked} bytes_acked:${acked} bytes_received:${received} segs_out:3`
+  const before = Model.parseSockets([
+    line("192.168.1.5:40000", "1.1.1.1:443", "curl", 1000, 500000),
+    line("192.168.1.5:40001", "2.2.2.2:443", "firefox", 4000, 4000),
+    line("127.0.0.1:5000", "127.0.0.1:6000", "node", 0, 0),
+    line("192.168.1.5:40002", "3.3.3.3:443", "", 9, 9)
+  ].join("\n"))
+  assert.deepEqual(Object.keys(before).length, 2)
+
+  const after = Model.parseSockets([
+    line("192.168.1.5:40000", "1.1.1.1:443", "curl", 3000, 2500000),
+    line("192.168.1.5:40001", "2.2.2.2:443", "firefox", 4000, 4000),
+    // Opened since the last reading: everything it carried counts.
+    line("192.168.1.5:40003", "4.4.4.4:443", "firefox", 20000, 10000),
+    line("[2001:db8::5]:40004", "[2001:db8::9]:443", "curl", 0, 0)
+  ].join("\n"))
+  const rows = Model.socketRates(before, after, 2, 5)
+  assert.deepEqual(rows, [
+    { name: "curl", down: 1000000, up: 1000 },
+    { name: "firefox", down: 5000, up: 10000 }
+  ])
+  assert.deepEqual(Model.socketRates(null, after, 2, 5), [])
+  assert.equal(Model.socketRates(before, after, 2, 1).length, 1)
+})

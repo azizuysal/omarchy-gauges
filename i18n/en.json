@@ -47,5 +47,9 @@
   "network.received": "Received",
   "network.sent": "Sent",
   "network.sinceBoot": "Since startup",
-  "network.updown": "↓ %1  ↑ %2"
+  "network.updown": "↓ %1  ↑ %2",
+  "network.top": "Top programs",
+  "network.other": "Other",
+  "network.quiet": "Nothing is using the network",
+  "network.topNote": "Programs are matched by their TCP connections. Traffic over UDP, such as video calls and much of a browser's, and other users' programs show under Other."
 }

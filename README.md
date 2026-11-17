@@ -12,8 +12,8 @@ whatever theme is active.
   where the card reports them.
 - **Disk**: space on each volume, read and write activity, and drive
   temperature.
-- **Network**: download and upload speed, history, and each interface's
-  speed and traffic since startup.
+- **Network**: download and upload speed, history, the programs using the
+  network most, and each interface's speed and traffic since startup.
 
 Requires Omarchy 4.5 or later.
 
@@ -136,6 +136,11 @@ Reports from other hardware are very welcome.
   ARM graphics), the load is added up from the usage each program reports in
   `/proc/<pid>/fdinfo`. Only your own programs are visible, so graphics work
   done by another user's processes is not counted.
+- The network panel's list of programs is built from the byte counts of TCP
+  connections (`ss`), which is what Linux shows without root. Traffic over
+  UDP, which includes QUIC and so much of a browser's, has no such counts,
+  and other users' connections carry no program name; both appear as
+  "Other". The list is read only while the network panel is open.
 - Network speed counts interfaces with a real device behind them, so VPN
   and loopback traffic is not counted twice.
 - A discrete card that is powered down is shown as asleep and left alone,

@@ -67,6 +67,27 @@ Item {
   property var netUpHistory: []
   property var netInterfaces: []
 
+  // The programs moving the most data, and whether a first reading is in.
+  property var netPrograms: []
+  property bool netProgramsReady: false
+  // How many open network panels want that list.
+  property int netWatchers: 0
+  function watchNetPrograms(on) {
+    netWatchers = Math.max(0, netWatchers + (on ? 1 : -1))
+  }
+  onNetWatchersChanged: {
+    if (netWatchers > 0) {
+      if (!socketProc.running) socketProc.running = true
+    } else {
+      // Stale by the time anyone looks again.
+      _previousSockets = null
+      netPrograms = []
+      netProgramsReady = false
+    }
+  }
+  property var _previousSockets: null
+  property double _previousSocketsAt: 0
+
   // ---- processes, grouped by program
   property var topByCpu: []
   property var topByMemory: []
@@ -231,6 +252,34 @@ Item {
       waitForEnd: true
       onStreamFinished: root.diskTemps = Model.parseTemps(text.split("\n")).disks
     }
+  }
+
+  // Which programs own the traffic. Only while a network panel is open.
+  Process {
+    id: socketProc
+    command: ["ss", "-tinpHO"]
+    environment: ({ LC_ALL: "C" })
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: {
+        if (root.netWatchers === 0) return
+        var now = Date.now()
+        var sockets = Model.parseSockets(text)
+        if (root._previousSockets) {
+          root.netPrograms = Model.socketRates(root._previousSockets, sockets, (now - root._previousSocketsAt) / 1000, 5)
+          root.netProgramsReady = true
+        }
+        root._previousSockets = sockets
+        root._previousSocketsAt = now
+      }
+    }
+  }
+
+  Timer {
+    interval: 2000
+    running: root.netWatchers > 0
+    repeat: true
+    onTriggered: if (!socketProc.running) socketProc.running = true
   }
 
   // top's first frame measures since boot, so each run takes two a second
