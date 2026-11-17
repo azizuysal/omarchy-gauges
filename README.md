@@ -1,6 +1,6 @@
 # Sysmon for Omarchy
 
-CPU, memory, GPU and disk readings in the Omarchy bar. Each one opens a detail
+CPU, memory, GPU, disk and network readings in the Omarchy bar. Each one opens a detail
 panel in the style of Omarchy's own battery and display panels, and follows
 whatever theme is active.
 
@@ -12,6 +12,8 @@ whatever theme is active.
   where the card reports them.
 - **Disk**: space on each volume, read and write activity, and drive
   temperature.
+- **Network**: download and upload speed, history, and each interface's
+  speed and traffic since startup.
 
 Requires Omarchy 4.5 or later.
 
@@ -48,10 +50,11 @@ rest of the bar layout in `~/.config/omarchy/shell.json`.
 | `memory` | `Gauge` | How memory in use is shown |
 | `gpu` | `Graph` | How graphics load is shown |
 | `disk` | `Pie` | How space on the system disk is shown |
-| `showPercentage` | `false` | Put the percentage beside graphs, gauges and pies |
+| `network` | `Graph` | How network traffic is shown: `Graph`, `Rates`, `Icon` or `Off` |
+| `showPercentage` | `false` | Put the number beside graphs, gauges and pies |
 | `warnAt` | `90` | Memory and disk turn the warning colour when this full (%) |
 
-Each reading takes one of these styles:
+CPU, memory, GPU and disk each take one of these styles:
 
 | Style | What it draws |
 |---|---|
@@ -62,6 +65,10 @@ Each reading takes one of these styles:
 | `Icon` | The icon alone |
 | `Icon and percentage` | Both |
 | `Off` | Leaves the reading out of the bar |
+
+The network has speeds, not a level, so its styles are its own: `Graph`
+draws recent upload above a middle line and download below it, both scaled
+to the busiest moment in view; `Rates` shows the two speeds as numbers.
 
 ```bash
 omarchy bar set azizuysal.sysmon memory Graph
@@ -94,12 +101,13 @@ o.bind("SUPER CTRL, M", "System monitor", "omarchy-shell sysmon toggle")
 | Memory | Gauge | Memory programs hold, not counting cache | At `warnAt` |
 | GPU | Graph | Load of the busiest card that reports it | Never |
 | Disk | Pie | Space used on the root filesystem | At `warnAt` |
+| Network | Graph | Upload and download speed over the last minute | Never |
 
 The GPU item is left out on a machine whose graphics report no load.
 
 ## Hardware support
 
-CPU load, memory and disk come from `/proc` and work on any machine Omarchy
+CPU load, memory, disk and network come from `/proc` and work on any machine Omarchy
 runs on, x86 or ARM, real or virtual. Temperature and graphics depend on what
 the hardware's drivers publish:
 
@@ -128,6 +136,8 @@ Reports from other hardware are very welcome.
   ARM graphics), the load is added up from the usage each program reports in
   `/proc/<pid>/fdinfo`. Only your own programs are visible, so graphics work
   done by another user's processes is not counted.
+- Network speed counts interfaces with a real device behind them, so VPN
+  and loopback traffic is not counted twice.
 - A discrete card that is powered down is shown as asleep and left alone,
   since reading its sensors would wake it.
 - On ARM the panel names the machine ("Apple MacBook Air (M1, 2020)") where

@@ -391,6 +391,22 @@ while :; do
     echo "$line"
   done <"$proc/diskstats"
 
+  # Each interface's counters, marked "p" when a real device stands behind
+  # it (and "v" for loopback, VPNs, bridges and the like, which only carry
+  # traffic a real one already counted) and with its link state.
+  echo "@@section net"
+  if [[ -r $proc/net/dev ]]; then
+    while IFS= read -r line; do
+      [[ $line == *:* ]] || continue
+      name="${line%%:*}"
+      name="${name//[[:space:]]/}"
+      kind=v
+      [[ -e $sys/class/net/$name/device ]] && kind=p
+      state=$(first_line "$sys/class/net/$name/operstate")
+      echo "$kind ${state:-unknown} $line"
+    done <"$proc/net/dev"
+  fi
+
   echo "@@section temps"
   for path in "${cpu_temp_paths[@]}"; do
     echo "cpu $(first_line "$path")"

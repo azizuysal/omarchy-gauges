@@ -37,5 +37,15 @@
   "disk.read": "Read",
   "disk.write": "Write",
   "disk.free": "%1 free",
-  "disk.none": "No disks found"
+  "disk.none": "No disks found",
+  "network.title": "Network",
+  "network.download": "Download",
+  "network.upload": "Upload",
+  "network.interfaces": "Interfaces",
+  "network.none": "No network interfaces found",
+  "network.down": "Down",
+  "network.received": "Received",
+  "network.sent": "Sent",
+  "network.sinceBoot": "Since startup",
+  "network.updown": "↓ %1  ↑ %2"
 }

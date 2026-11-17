@@ -255,6 +255,71 @@ function diskRates(previous, current, seconds) {
   return rates
 }
 
+// ------------------------------------------------------------------ network
+
+// Byte counters per interface, from sample.sh's "net" section: each line is
+// "<p|v> <link state> <line of /proc/net/dev>".
+function parseNet(lines) {
+  var interfaces = {}
+  for (var i = 0; i < lines.length; i++) {
+    var match = lines[i].match(/^([pv])\s+(\S+)\s+([^:]+):\s*(.*)$/)
+    if (!match) continue
+    var fields = match[4].trim().split(/\s+/)
+    if (fields.length < 9) continue
+    var received = num(fields[0])
+    var sent = num(fields[8])
+    if (received === null || sent === null) continue
+    interfaces[match[3].trim()] = {
+      physical: match[1] === "p",
+      state: match[2],
+      received: received,
+      sent: sent
+    }
+  }
+  return interfaces
+}
+
+// Bytes a second down and up, in total and per interface. Only interfaces
+// with a real device behind them count toward the total: a VPN's traffic
+// already went through one of those, and loopback never left the machine.
+// A machine with no such interface (a container) counts everything but
+// loopback instead.
+function netRates(previous, current, seconds) {
+  var rates = { down: 0, up: 0, interfaces: [] }
+  if (!current) return rates
+  var names = Object.keys(current).sort()
+  var anyPhysical = names.some(function(name) { return current[name].physical })
+  for (var i = 0; i < names.length; i++) {
+    var name = names[i]
+    var now = current[name]
+    if (anyPhysical ? !now.physical : name === "lo") continue
+    var then = previous ? previous[name] : null
+    var down = 0
+    var up = 0
+    if (then && seconds > 0) {
+      down = Math.max(0, now.received - then.received) / seconds
+      up = Math.max(0, now.sent - then.sent) / seconds
+    }
+    rates.down += down
+    rates.up += up
+    rates.interfaces.push({
+      name: name, state: now.state, down: down, up: up,
+      received: now.received, sent: now.sent
+    })
+  }
+  return rates
+}
+
+// A rate in at most four characters, for the bar: "0K", "87K", "1.2M", "34M".
+function rateCompact(bytesPerSecond) {
+  var value = Math.max(0, bytesPerSecond || 0) / 1024
+  var units = ["K", "M", "G", "T"]
+  var unit = 0
+  while (value >= 999.5 && unit < units.length - 1) { value /= 1024; unit++ }
+  var text = value < 9.95 && unit > 0 ? value.toFixed(1) : String(Math.round(value))
+  return text + units[unit]
+}
+
 // `df -P -B1 -T` output as one entry per real device. A btrfs device mounted
 // several times over (subvolumes) is one disk, shown at its shortest mount.
 function parseDf(text) {
@@ -596,6 +661,9 @@ if (typeof module !== "undefined") {
     parseMeminfo: parseMeminfo,
     parseDiskstats: parseDiskstats,
     diskRates: diskRates,
+    parseNet: parseNet,
+    netRates: netRates,
+    rateCompact: rateCompact,
     parseDf: parseDf,
     primaryFilesystem: primaryFilesystem,
     parseTemps: parseTemps,

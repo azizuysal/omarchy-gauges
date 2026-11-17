@@ -278,3 +278,31 @@ test("gpuAvailable is false when no card can report load", () => {
   assert.equal(Model.gpuAvailable(Model.parseGpus(["card2|0x1002|asleep"], {}, [])), true)
   assert.equal(Model.gpuAvailable(Model.parseGpus(["card1|0x8086|awake|||||||"], {}, [], { card1: 0 })), true)
 })
+
+test("netRates counts real interfaces and leaves out loopback and VPNs", () => {
+  const frame = (wifi, vpn) => Model.parseNet([
+    "v unknown     lo:  377036    3976    0    0    0     0          0         0   377036    3976    0    0    0     0       0          0",
+    `p up wlp5s0: ${wifi}  407227    0   10    0     0          0    101870 ${wifi / 2}  179454    0    0    0     0       0          0`,
+    "p down enp69s0u1: 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0",
+    `v unknown tailscale0: ${vpn} 119 0 0 0 0 0 0 ${vpn} 206 0 0 0 0 0 0`
+  ])
+  assert.equal(Model.netRates(null, frame(1000, 500), 2).down, 0)
+  const rates = Model.netRates(frame(1000000, 500), frame(1400000, 900000), 2)
+  assert.equal(rates.down, 200000)
+  assert.equal(rates.up, 100000)
+  assert.deepEqual(rates.interfaces.map(entry => entry.name), ["enp69s0u1", "wlp5s0"])
+  assert.equal(rates.interfaces[0].state, "down")
+})
+
+test("netRates falls back to every interface but loopback when none is real", () => {
+  const frame = bytes => Model.parseNet(["v unknown lo: 5 0 0 0 0 0 0 0 5 0 0 0 0 0 0 0", `v up eth0: ${bytes} 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0`])
+  assert.equal(Model.netRates(frame(0), frame(3000), 3).down, 1000)
+})
+
+test("rateCompact fits a rate in four characters", () => {
+  assert.equal(Model.rateCompact(0), "0K")
+  assert.equal(Model.rateCompact(89000), "87K")
+  assert.equal(Model.rateCompact(1024 * 1024 * 1.25), "1.3M")
+  assert.equal(Model.rateCompact(1024 * 1024 * 34), "34M")
+  assert.equal(Model.rateCompact(1023 * 1024), "1.0M")
+})

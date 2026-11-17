@@ -5,7 +5,7 @@
   "version": "0.1.0",
   "author": "Aziz Uysal",
   "license": "MIT",
-  "description": "CPU, memory, GPU and disk in the bar as small live graphs, each with a detail panel: history graphs, per-core load, temperatures, top processes and volumes.",
+  "description": "CPU, memory, GPU, disk and network in the bar as small live graphs, each with a detail panel: history graphs, per-core load, temperatures, top processes, volumes and interfaces.",
   "kinds": [
     "service",
     "bar-widget"
@@ -17,7 +17,7 @@
   },
   "barWidget": {
     "displayName": "System monitor",
-    "description": "Live CPU, memory, GPU and disk readings as graphs, gauges, numbers or icons, each opening a detail panel.",
+    "description": "Live CPU, memory, GPU, disk and network readings as graphs, gauges, numbers or icons, each opening a detail panel.",
     "category": "System",
     "allowMultiple": true,
     "defaultSection": "right",
@@ -26,6 +26,7 @@
       "memory": "Gauge",
       "gpu": "Graph",
       "disk": "Pie",
+      "network": "Graph",
       "showPercentage": false,
       "warnAt": 90
     },
@@ -95,9 +96,22 @@
         "description": "How space used on the system disk is shown in the bar. Graph draws recent read and write activity; Gauge and Pie draw the current level; Off leaves it out."
       },
       {
+        "key": "network",
+        "type": "enum",
+        "label": "Network",
+        "options": [
+          "Graph",
+          "Rates",
+          "Icon",
+          "Off"
+        ],
+        "defaultValue": "Graph",
+        "description": "How network traffic is shown in the bar. Graph draws recent upload above a middle line and download below it; Rates shows both speeds as numbers; Off leaves it out."
+      },
+      {
         "key": "showPercentage",
         "type": "boolean",
-        "label": "Show the percentage beside graphs, gauges and pies",
+        "label": "Show the number beside graphs, gauges and pies",
         "defaultValue": false
       },
       {

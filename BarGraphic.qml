@@ -4,6 +4,8 @@ import qs.Commons
 // The small picture a bar item shows in place of a number:
 //
 //   "history"  the last few readings as a bar graph (processor, graphics)
+//   "mirror"   two histories about a middle line: `values` rising above
+//              it, `secondary` hanging below (network up and down)
 //   "column"   an upright gauge filling from the bottom, with an optional
 //              fainter second part above it (memory in use, then cache)
 //   "pie"      how much of a whole is taken (disk space)
@@ -16,18 +18,22 @@ Canvas {
   property color color: "white"
   // "history": readings from 0 to 1, oldest first.
   property var values: []
+  // "mirror": the readings drawn below the line.
+  property var secondary: []
   // "column" and "pie": the solid part, and for the column a fainter part
   // after it.
   property real fraction: 0
   property real extra: 0
 
   readonly property int bars: 10
+  // How many readings the "mirror" graph draws, one unit wide each.
+  readonly property int mirrorSamples: 29
   readonly property real unit: Style.bar.iconSize / 12
   readonly property real barWidth: 2 * unit
   readonly property real barGap: unit
 
   implicitHeight: Style.bar.iconSize
-  implicitWidth: kind === "history" ? bars * barWidth + (bars - 1) * barGap
+  implicitWidth: kind === "history" || kind === "mirror" ? bars * barWidth + (bars - 1) * barGap
     : kind === "column" ? 7 * unit
     : implicitHeight
   width: implicitWidth
@@ -36,6 +42,7 @@ Canvas {
   onKindChanged: requestPaint()
   onColorChanged: requestPaint()
   onValuesChanged: requestPaint()
+  onSecondaryChanged: requestPaint()
   onFractionChanged: requestPaint()
   onExtraChanged: requestPaint()
   onWidthChanged: requestPaint()
@@ -62,6 +69,31 @@ Canvas {
       var tall = Math.max(unit, clamp(values[index]) * height)
       context.fillStyle = tint(1)
       context.fillRect(x, height - tall, barWidth, tall)
+    }
+  }
+
+  // One thin line per reading, touching its neighbours, so the two
+  // histories read as silhouettes either side of the middle line.
+  function paintMirror(context) {
+    var middle = Math.round(height / 2)
+    var half = middle - unit / 2
+    context.fillStyle = tint(0.3)
+    context.fillRect(0, middle - unit / 2, width, unit)
+    context.fillStyle = tint(1)
+    for (var slot = 0; slot < mirrorSamples; slot++) {
+      var x = slot * unit
+      var above = values.length - mirrorSamples + slot
+      var below = secondary.length - mirrorSamples + slot
+      // A trickle too small to draw is left off, so an idle network is a
+      // clean line rather than a thick one.
+      var up = above >= 0 ? clamp(values[above]) * half : 0
+      if (up >= unit / 2) {
+        context.fillRect(x, middle - unit / 2 - up, unit, up)
+      }
+      var down = below >= 0 ? clamp(secondary[below]) * half : 0
+      if (down >= unit / 2) {
+        context.fillRect(x, middle + unit / 2, unit, down)
+      }
     }
   }
 
@@ -122,6 +154,7 @@ Canvas {
     var context = getContext("2d")
     context.reset()
     if (kind === "history") paintHistory(context)
+    else if (kind === "mirror") paintMirror(context)
     else if (kind === "column") paintColumn(context)
     else paintPie(context)
   }

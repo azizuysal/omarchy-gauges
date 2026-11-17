@@ -31,7 +31,7 @@ Panel {
   }
 
   readonly property string pluginId: "azizuysal.sysmon"
-  readonly property var allItems: ["cpu", "memory", "gpu", "disk"]
+  readonly property var allItems: ["cpu", "memory", "gpu", "disk", "network"]
 
   // ---- readings
   readonly property var sharedStats: bar && bar.shell && typeof bar.shell.serviceFor === "function"
@@ -57,11 +57,15 @@ Panel {
   // How each reading is shown: "graph", "gauge", "pie", "percentage", "icon",
   // "icon and percentage" or "off". A string per reading rather than one map,
   // so the bindings below only re-run when a setting actually changes.
-  readonly property var defaultStyles: ({ cpu: "graph", memory: "gauge", gpu: "graph", disk: "pie" })
+  // The network has rates, not a level, so its styles are "graph", "rates",
+  // "icon" and "off".
+  readonly property var defaultStyles: ({ cpu: "graph", memory: "gauge", gpu: "graph", disk: "pie", network: "graph" })
   readonly property var knownStyles: ["graph", "gauge", "pie", "percentage", "icon", "icon and percentage", "off"]
+  readonly property var networkStyles: ["graph", "rates", "icon", "off"]
   function styleSetting(item) {
     var chosen = String(setting(item, defaultStyles[item])).toLowerCase()
-    if (knownStyles.indexOf(chosen) === -1) chosen = defaultStyles[item]
+    var known = item === "network" ? networkStyles : knownStyles
+    if (known.indexOf(chosen) === -1) chosen = defaultStyles[item]
     // A vertical bar is too narrow for anything but the icon.
     return vertical && chosen !== "off" ? "icon" : chosen
   }
@@ -69,8 +73,10 @@ Panel {
   readonly property string memoryStyle: styleSetting("memory")
   readonly property string gpuStyle: styleSetting("gpu")
   readonly property string diskStyle: styleSetting("disk")
+  readonly property string networkStyle: styleSetting("network")
   function style(item) {
-    return item === "cpu" ? cpuStyle : item === "memory" ? memoryStyle : item === "gpu" ? gpuStyle : diskStyle
+    return item === "cpu" ? cpuStyle : item === "memory" ? memoryStyle : item === "gpu" ? gpuStyle
+      : item === "disk" ? diskStyle : networkStyle
   }
   function drawn(item) {
     var chosen = style(item)
@@ -90,7 +96,7 @@ Panel {
   // new list rebuilds every bar button.
   readonly property bool hasGpu: stats ? stats.gpuAvailable : false
   readonly property var items: {
-    var styles = { cpu: cpuStyle, memory: memoryStyle, gpu: gpuStyle, disk: diskStyle }
+    var styles = { cpu: cpuStyle, memory: memoryStyle, gpu: gpuStyle, disk: diskStyle, network: networkStyle }
     return allItems.filter(function(item) {
       return styles[item] !== "off" && (item !== "gpu" || hasGpu)
     })
@@ -153,7 +159,8 @@ Panel {
     cpu: String.fromCodePoint(0xF4BC),
     memory: String.fromCodePoint(0xF061A),
     gpu: String.fromCodePoint(0xF08AE),
-    disk: String.fromCodePoint(0xF02CA)
+    disk: String.fromCodePoint(0xF02CA),
+    network: String.fromCodePoint(0xF04E1)
   })
 
   Commons.Translations {
@@ -201,6 +208,8 @@ Panel {
     if (item === "memory") return stats.memory.total > 0 ? stats.memory.fraction : -1
     if (item === "gpu") return stats.gpu ? stats.gpu.busy : -1
     if (item === "disk") return stats.filesystem ? stats.filesystem.fraction : -1
+    // The network has no level; it is either measured or not.
+    if (item === "network") return stats.netReady ? 0 : -1
     return -1
   }
 
@@ -219,8 +228,31 @@ Panel {
 
   // What a drawn item shows; see BarGraphic.
   function graphicKind(item) {
+    if (item === "network") return "mirror"
     var chosen = style(item)
     return chosen === "gauge" ? "column" : chosen === "pie" ? "pie" : "history"
+  }
+
+  // As many readings as BarGraphic's "mirror" graph draws.
+  readonly property int networkSamples: 29
+  // The busiest moment in the network graph's readings, up or down, and
+  // never less than a floor, so a trickle of background traffic stays small.
+  readonly property real networkGraphFloor: 128 * 1024
+  readonly property real networkGraphPeak: {
+    var peak = networkGraphFloor
+    if (!stats) return peak
+    var series = [stats.netDownHistory.slice(-networkSamples), stats.netUpHistory.slice(-networkSamples)]
+    for (var s = 0; s < series.length; s++)
+      for (var i = 0; i < series[s].length; i++) if (series[s][i] > peak) peak = series[s][i]
+    return peak
+  }
+  function networkSeries(history) {
+    var peak = networkGraphPeak
+    return history.slice(-networkSamples).map(function(rate) { return rate / peak })
+  }
+
+  function networkTooltip() {
+    return translations.t("network.title") + "  ↓ " + rateText(stats.netDown) + "  ↑ " + rateText(stats.netUp)
   }
 
   // Ten megabytes a second fills the disk graph, more if the disk is doing
@@ -231,6 +263,8 @@ Panel {
   // disk's graph is its activity, reads and writes together.
   function graphicValues(item) {
     if (!stats || style(item) !== "graph") return []
+    // Above the line: what is being sent.
+    if (item === "network") return networkSeries(stats.netUpHistory)
     if (item === "cpu") return stats.cpuHistory
     if (item === "gpu") return stats.gpuHistory
     if (item === "memory") return stats.memoryHistory
@@ -256,8 +290,10 @@ Panel {
   function barTooltip(item) {
     var value = reading(item)
     var chosen = style(item)
-    var numbered = chosen === "percentage" || chosen === "icon and percentage" || (drawn(item) && showPercentage)
+    var numbered = chosen === "percentage" || chosen === "icon and percentage" || chosen === "rates"
+      || (drawn(item) && showPercentage)
     if (numbered || value < 0) return ""
+    if (item === "network") return networkTooltip()
     return translations.t(item + ".title") + " " + percentText(value, 0)
   }
 
@@ -266,6 +302,12 @@ Panel {
     font.family: root.bar ? root.bar.fontFamily : Style.font.family
     font.pixelSize: Style.bar.iconFont
     text: "100%"
+  }
+  TextMetrics {
+    id: rateMetrics
+    font.family: root.bar ? root.bar.fontFamily : Style.font.family
+    font.pixelSize: Math.round(Style.bar.iconFont * 0.72)
+    text: "↓999M"
   }
   // Wide enough for "100%", so neighbours never move as readings change.
   readonly property real labelSlot: Style.bar.iconSlot + Math.ceil(labelMetrics.advanceWidth) + Style.space(4)
@@ -294,7 +336,9 @@ Panel {
         // Graphs, gauges, pies and bare percentages are laid out below; the
         // two icon styles are the button's own icon and label.
         readonly property bool graphed: known && root.drawn(modelData)
-        readonly property bool numbered: known && (style === "percentage" || (graphed && root.showPercentage))
+        readonly property bool numbered: known
+          && (style === "percentage" || style === "rates" || (graphed && root.showPercentage))
+        readonly property bool network: modelData === "network"
         readonly property bool custom: graphed || numbered
         readonly property color ink: active ? root.urgent : root.foreground
 
@@ -324,8 +368,32 @@ Panel {
           spacing: Style.space(4)
           scale: button.pressScale
 
+          // Network rates, sent over received, small enough to stack.
+          Column {
+            visible: button.numbered && button.network
+            anchors.verticalCenter: parent.verticalCenter
+            spacing: -Style.space(1)
+
+            Repeater {
+              model: 2
+
+              Text {
+                required property int index
+                width: Math.ceil(rateMetrics.advanceWidth)
+                horizontalAlignment: Text.AlignRight
+                textFormat: Text.PlainText
+                text: (index === 0 ? "↑" : "↓")
+                  + Model.rateCompact(root.stats ? (index === 0 ? root.stats.netUp : root.stats.netDown) : 0)
+                font.family: root.fontFamily
+                font.pixelSize: rateMetrics.font.pixelSize
+                color: button.ink
+                renderType: Text.NativeRendering
+              }
+            }
+          }
+
           Text {
-            visible: button.numbered
+            visible: button.numbered && !button.network
             anchors.verticalCenter: parent.verticalCenter
             // As wide as "100%", so nothing shifts as the reading changes.
             width: Math.ceil(labelMetrics.advanceWidth)
@@ -344,6 +412,7 @@ Panel {
             kind: root.graphicKind(button.modelData)
             color: button.ink
             values: root.graphicValues(button.modelData)
+            secondary: button.network && root.stats ? root.networkSeries(root.stats.netDownHistory) : []
             fraction: Math.max(0, root.reading(button.modelData))
             extra: root.graphicExtra(button.modelData)
           }
@@ -364,6 +433,7 @@ Panel {
   Component { id: memoryView; MemoryView { ctx: root } }
   Component { id: gpuView; GpuView { ctx: root } }
   Component { id: diskView; DiskView { ctx: root } }
+  Component { id: networkView; NetworkView { ctx: root } }
 
   KeyboardPanel {
     id: panel
@@ -392,6 +462,7 @@ Panel {
           : root.active === "memory" ? memoryView
           : root.active === "gpu" ? gpuView
           : root.active === "disk" ? diskView
+          : root.active === "network" ? networkView
           : cpuView
       }
     }

@@ -59,6 +59,14 @@ Item {
   property var diskWriteHistory: []
   property var diskTemps: []
 
+  // ---- network, bytes a second
+  property bool netReady: false
+  property real netDown: 0
+  property real netUp: 0
+  property var netDownHistory: []
+  property var netUpHistory: []
+  property var netInterfaces: []
+
   // ---- processes, grouped by program
   property var topByCpu: []
   property var topByMemory: []
@@ -89,6 +97,7 @@ Item {
   property var _previousCpu: null
   property var _previousDisks: null
   property var _previousClients: null
+  property var _previousNet: null
   property double _previousUptime: 0
 
   function consume(line) {
@@ -142,6 +151,18 @@ Item {
     }
     _previousDisks = disks
 
+    var net = Model.parseNet(sections.net || [])
+    var netRates = Model.netRates(_previousNet, net, seconds)
+    netInterfaces = netRates.interfaces
+    if (_previousNet && seconds > 0) {
+      netDown = netRates.down
+      netUp = netRates.up
+      netDownHistory = Model.pushHistory(netDownHistory, netRates.down, historyLength)
+      netUpHistory = Model.pushHistory(netUpHistory, netRates.up, historyLength)
+      netReady = netRates.interfaces.length > 0
+    }
+    _previousNet = net
+
     var clients = Model.parseDrmClients(sections.drmclients || [])
     var clientLoad = Model.drmLoad(_previousClients, clients, seconds)
     _previousClients = clients
@@ -169,6 +190,7 @@ Item {
       root._previousCpu = null
       root._previousDisks = null
       root._previousClients = null
+      root._previousNet = null
       restart.start()
     }
   }
