@@ -1,4 +1,4 @@
-# Sysmon for Omarchy
+# Gauges for Omarchy
 
 CPU, memory, GPU, disk and network readings in the Omarchy bar. Each one opens a detail
 panel in the style of Omarchy's own battery and display panels, and follows
@@ -20,11 +20,11 @@ Requires Omarchy 4.5 or later.
 ## Install
 
 ```bash
-omarchy plugin add https://github.com/OWNER/omarchy-sysmon.git --enable
+omarchy plugin add https://github.com/OWNER/omarchy-gauges.git --enable
 ```
 
-Update with `omarchy plugin update azizuysal.sysmon`, remove with
-`omarchy plugin remove azizuysal.sysmon`.
+Update with `omarchy plugin update azizuysal.gauges`, remove with
+`omarchy plugin remove azizuysal.gauges`.
 
 ## Use
 
@@ -36,12 +36,12 @@ Update with `omarchy plugin update azizuysal.sysmon`, remove with
 | Tab | Move to the next bar panel |
 | Esc | Close |
 
-Drag the widget along the bar to move it, or use `omarchy bar move azizuysal.sysmon --section right`.
+Drag the widget along the bar to move it, or use `omarchy bar move azizuysal.gauges --section right`.
 
 ### Settings
 
 Set these in the shell's settings panel, or with
-`omarchy bar set azizuysal.sysmon <key> <value>`. They are stored with the
+`omarchy bar set azizuysal.gauges <key> <value>`. They are stored with the
 rest of the bar layout in `~/.config/omarchy/shell.json`.
 
 | Key | Default | Meaning |
@@ -71,9 +71,9 @@ draws recent upload above a middle line and download below it, both scaled
 to the busiest moment in view; `Rates` shows the two speeds as numbers.
 
 ```bash
-omarchy bar set azizuysal.sysmon memory Graph
-omarchy bar set azizuysal.sysmon gpu Off
-omarchy bar set azizuysal.sysmon showPercentage true --json
+omarchy bar set azizuysal.gauges memory Graph
+omarchy bar set azizuysal.gauges gpu Off
+omarchy bar set azizuysal.gauges showPercentage true --json
 ```
 
 Hovering a reading that shows no number gives its percentage. On a vertical
@@ -85,12 +85,12 @@ a copy should not show to `Off`.
 
 ### Keybindings
 
-`omarchy-shell sysmon show <reading>` opens a panel directly, and
-`omarchy-shell sysmon toggle` toggles the last one. For example, in
+`omarchy-shell gauges show <reading>` opens a panel directly, and
+`omarchy-shell gauges toggle` toggles the last one. For example, in
 `~/.config/hypr/bindings.lua`:
 
 ```lua
-o.bind("SUPER CTRL, M", "System monitor", "omarchy-shell sysmon toggle")
+o.bind("SUPER CTRL, M", "System monitor", "omarchy-shell gauges toggle")
 ```
 
 ## Naming every program on the network (optional)
@@ -99,12 +99,12 @@ Seeing which program is behind each byte of traffic means watching packets,
 which Linux does not let an ordinary user do. One command sets that up:
 
 ```bash
-sudo ~/.config/omarchy/plugins/azizuysal.sysmon/nethogs-setup
+sudo ~/.config/omarchy/plugins/azizuysal.gauges/nethogs-setup
 ```
 
 It installs `nethogs` if it is missing, gives it the capabilities to capture
 packets without root, and adds a pacman hook
-(`/etc/pacman.d/hooks/sysmon-nethogs-capabilities.hook`) that restores them
+(`/etc/pacman.d/hooks/gauges-nethogs-capabilities.hook`) that restores them
 whenever `nethogs` is updated, since an update would otherwise drop them.
 
 Afterwards any user on the machine can run `nethogs` and see which programs

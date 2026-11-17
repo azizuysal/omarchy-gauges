@@ -13,7 +13,7 @@ const script = path.join(__dirname, "..", "sample.sh")
 // Builds a fake /sys, /proc and /dev from { "relative/path": "contents" }.
 // A value of { link: target } makes a symlink.
 function machine(files) {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "sysmon-"))
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "gauges-"))
   const base = {
     "proc/uptime": "100.00 400.00\n",
     "proc/stat": "cpu  10 0 10 80 0 0 0 0 0 0\ncpu0 10 0 10 80 0 0 0 0 0 0\n",
@@ -32,7 +32,7 @@ function machine(files) {
 }
 
 function sample(root) {
-  const out = execFileSync("bash", [script, "--once"], { env: { ...process.env, SYSMON_ROOT: root }, encoding: "utf8" })
+  const out = execFileSync("bash", [script, "--once"], { env: { ...process.env, GAUGES_ROOT: root }, encoding: "utf8" })
   fs.rmSync(root, { recursive: true, force: true })
   const blocks = []
   let lines = []

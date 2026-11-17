@@ -3,7 +3,7 @@ import Quickshell
 import Quickshell.Io
 import "Model.js" as Model
 
-// The one sampler behind every sysmon bar item. A bar is built per monitor,
+// The one sampler behind every gauges bar item. A bar is built per monitor,
 // so the readings live here, once, rather than in each widget.
 //
 // sample.sh streams raw counters every `interval` seconds; this turns them

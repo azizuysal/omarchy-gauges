@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Streams raw system readings for the sysmon plugin, one frame per interval.
+# Streams raw system readings for the gauges plugin, one frame per interval.
 #
 # Usage: sample.sh [--once] [interval-seconds]
 #        sample.sh --disk-temps
@@ -20,7 +20,7 @@
 # if a graphics card appears or goes away. --once sends the static frame and
 # one frame, then stops; the tests use it.
 #
-# SYSMON_ROOT, when set, is put in front of /sys, /proc and /dev, so the
+# GAUGES_ROOT, when set, is put in front of /sys, /proc and /dev, so the
 # tests can run the script against a made-up machine.
 #
 # Drive temperatures are deliberately not part of the stream. Reading one
@@ -29,7 +29,7 @@
 # couple of seconds makes input stutter. --disk-temps reads them once, for the
 # disk panel to call while it is open.
 
-root="${SYSMON_ROOT:-}"
+root="${GAUGES_ROOT:-}"
 sys="$root/sys"
 proc="$root/proc"
 dev="$root/dev"

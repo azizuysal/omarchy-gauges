@@ -11,9 +11,9 @@ import "Model.js" as Model
 Panel {
   id: root
 
-  ipcTarget: "sysmon"
+  ipcTarget: "gauges"
   // The base's handler only opens and closes; ours also takes a reading to
-  // open on, e.g. `omarchy-shell sysmon show memory`, handy for keybindings.
+  // open on, e.g. `omarchy-shell gauges show memory`, handy for keybindings.
   manageIpc: false
 
   ShellIpc {
@@ -30,7 +30,7 @@ Panel {
     }
   }
 
-  readonly property string pluginId: "azizuysal.sysmon"
+  readonly property string pluginId: "azizuysal.gauges"
   readonly property var allItems: ["cpu", "memory", "gpu", "disk", "network"]
 
   // ---- readings

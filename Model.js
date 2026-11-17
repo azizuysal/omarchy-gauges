@@ -1,4 +1,4 @@
-// Pure parsing and arithmetic for the sysmon plugin. Nothing here touches QML,
+// Pure parsing and arithmetic for the gauges plugin. Nothing here touches QML,
 // so the whole file runs under node for tests (see tests/model.test.js).
 
 var SECTOR_BYTES = 512
