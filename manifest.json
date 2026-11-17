@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "azizuysal.gauges",
   "name": "Gauges",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "author": "Aziz Uysal",
   "license": "MIT",
   "description": "CPU, memory, GPU, disk and network in the bar as small live graphs, each with a detail panel: history graphs, per-core load, temperatures, top processes, volumes and interfaces.",
