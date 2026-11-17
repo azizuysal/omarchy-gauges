@@ -234,7 +234,7 @@ Panel {
   }
 
   // As many readings as BarGraphic's "mirror" graph draws.
-  readonly property int networkSamples: 29
+  readonly property int networkSamples: 12
   // The busiest moment in the network graph's readings, up or down, and
   // never less than a floor, so a trickle of background traffic stays small.
   readonly property real networkGraphFloor: 128 * 1024

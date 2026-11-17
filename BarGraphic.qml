@@ -26,8 +26,11 @@ Canvas {
   property real extra: 0
 
   readonly property int bars: 10
-  // How many readings the "mirror" graph draws across its width.
-  readonly property int mirrorSamples: 29
+  // The "mirror" graph's bars: slimmer than the history graph's, and more of
+  // them, in the same width.
+  readonly property int mirrorSamples: 12
+  readonly property real mirrorBarWidth: 1.5 * unit
+  readonly property real mirrorBarGap: unit
   readonly property real unit: Style.bar.iconSize / 12
   readonly property real barWidth: 2 * unit
   readonly property real barGap: unit
@@ -72,50 +75,25 @@ Canvas {
     }
   }
 
-  // Traces one history as a smooth curve, `direction` -1 for above the
-  // middle line and 1 for below, and returns where it started. The curve runs
-  // through the midpoints between readings, which rounds every corner.
-  function mirrorCurve(context, series, middle, reach, direction) {
-    var count = Math.min(mirrorSamples, series.length)
-    var step = width / (mirrorSamples - 1)
-    var first = series.length - count
-    function px(i) { return width - (count - 1 - i) * step }
-    function py(i) { return middle + direction * clamp(series[first + i]) * reach }
-    context.moveTo(px(0), py(0))
-    for (var i = 1; i < count - 1; i++) {
-      context.quadraticCurveTo(px(i), py(i), (px(i) + px(i + 1)) / 2, (py(i) + py(i + 1)) / 2)
-    }
-    context.lineTo(px(count - 1), py(count - 1))
-    return px(0)
-  }
-
-  // Two smooth lines either side of a faint middle line, each with a light
-  // wash between it and the middle.
+  // Slim bars either side of a faint middle line, with gaps between them so
+  // a busy stretch stays a row of bars rather than merging into a block.
   function paintMirror(context) {
-    var middle = height / 2
-    var reach = middle - unit
-    context.fillStyle = tint(0.25)
-    context.fillRect(0, middle - unit / 4, width, unit / 2)
-
-    var halves = [{ series: values, direction: -1 }, { series: secondary, direction: 1 }]
-    for (var h = 0; h < halves.length; h++) {
-      var series = halves[h].series
-      if (series.length < 2) continue
-      context.beginPath()
-      var start = mirrorCurve(context, series, middle, reach, halves[h].direction)
-      context.lineTo(width, middle)
-      context.lineTo(start, middle)
-      context.closePath()
-      context.fillStyle = tint(0.22)
-      context.fill()
-
-      context.beginPath()
-      mirrorCurve(context, series, middle, reach, halves[h].direction)
-      context.lineWidth = unit
-      context.lineJoin = "round"
-      context.lineCap = "round"
-      context.strokeStyle = tint(1)
-      context.stroke()
+    var middle = Math.round(height / 2)
+    var half = middle - unit / 2
+    var pitch = mirrorBarWidth + mirrorBarGap
+    context.fillStyle = tint(0.3)
+    context.fillRect(0, middle - unit / 2, width, unit)
+    context.fillStyle = tint(1)
+    for (var slot = 0; slot < mirrorSamples; slot++) {
+      var x = slot * pitch
+      var above = values.length - mirrorSamples + slot
+      var below = secondary.length - mirrorSamples + slot
+      // A trickle too small to draw is left off, so an idle network is a
+      // clean line.
+      var up = above >= 0 ? clamp(values[above]) * half : 0
+      if (up >= unit / 2) context.fillRect(x, middle - unit / 2 - up, mirrorBarWidth, up)
+      var down = below >= 0 ? clamp(secondary[below]) * half : 0
+      if (down >= unit / 2) context.fillRect(x, middle + unit / 2, mirrorBarWidth, down)
     }
   }
 
