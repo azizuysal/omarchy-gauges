@@ -54,23 +54,45 @@ Panel {
 
   // ---- settings
   readonly property bool vertical: bar ? bar.vertical : false
-  // "graphs", "percentages" or "icons". A vertical bar is too narrow for
-  // anything beside the icon.
-  readonly property string display: {
-    if (vertical) return "icons"
-    var chosen = String(setting("display", "Graphs")).toLowerCase()
-    return chosen === "percentages" || chosen === "icons" ? chosen : "graphs"
+  // How each reading is shown: "graph", "gauge", "pie", "percentage", "icon",
+  // "icon and percentage" or "off". A string per reading rather than one map,
+  // so the bindings below only re-run when a setting actually changes.
+  readonly property var defaultStyles: ({ cpu: "graph", memory: "gauge", gpu: "graph", disk: "pie" })
+  readonly property var knownStyles: ["graph", "gauge", "pie", "percentage", "icon", "icon and percentage", "off"]
+  function styleSetting(item) {
+    var chosen = String(setting(item, defaultStyles[item])).toLowerCase()
+    if (knownStyles.indexOf(chosen) === -1) chosen = defaultStyles[item]
+    // A vertical bar is too narrow for anything but the icon.
+    return vertical && chosen !== "off" ? "icon" : chosen
   }
+  readonly property string cpuStyle: styleSetting("cpu")
+  readonly property string memoryStyle: styleSetting("memory")
+  readonly property string gpuStyle: styleSetting("gpu")
+  readonly property string diskStyle: styleSetting("disk")
+  function style(item) {
+    return item === "cpu" ? cpuStyle : item === "memory" ? memoryStyle : item === "gpu" ? gpuStyle : diskStyle
+  }
+  function drawn(item) {
+    var chosen = style(item)
+    return chosen === "graph" || chosen === "gauge" || chosen === "pie"
+  }
+
+  // The percentage beside a graph, gauge or pie.
+  readonly property bool showPercentage: setting("showPercentage", false) === true
+  // Memory and disk turn the warning colour from this share upward.
+  readonly property real warnAt: {
+    var percent = Number(setting("warnAt", 90))
+    return isFinite(percent) ? Math.max(1, Math.min(100, percent)) / 100 : 0.9
+  }
+
   // No GPU item on a machine whose graphics report no load. A property of
   // its own so `items` only changes when that does, not on every sample: a
   // new list rebuilds every bar button.
   readonly property bool hasGpu: stats ? stats.gpuAvailable : false
   readonly property var items: {
-    var chosen = setting("items", [])
-    if (!Array.isArray(chosen) || chosen.length === 0) chosen = allItems
-    // Keep the canonical order whatever order they were ticked in.
+    var styles = { cpu: cpuStyle, memory: memoryStyle, gpu: gpuStyle, disk: diskStyle }
     return allItems.filter(function(item) {
-      return chosen.indexOf(item) !== -1 && (item !== "gpu" || hasGpu)
+      return styles[item] !== "off" && (item !== "gpu" || hasGpu)
     })
   }
 
@@ -192,29 +214,50 @@ Panel {
   // A full disk or exhausted memory is worth a warning colour in the bar; a
   // busy processor or graphics card is just the machine doing its job.
   function alarming(item) {
-    return (item === "memory" || item === "disk") && reading(item) >= 0.9
+    return (item === "memory" || item === "disk") && reading(item) >= warnAt
   }
 
-  // What the small graph beside an icon draws; see BarGraphic.
+  // What a drawn item shows; see BarGraphic.
   function graphicKind(item) {
-    return item === "memory" ? "column" : item === "disk" ? "pie" : "history"
+    var chosen = style(item)
+    return chosen === "gauge" ? "column" : chosen === "pie" ? "pie" : "history"
   }
 
+  // Ten megabytes a second fills the disk graph, more if the disk is doing
+  // more, so idle chatter does not look like work.
+  readonly property real diskGraphFloor: 10 * 1048576
+
+  // The readings a history graph draws. Disk space hardly moves, so the
+  // disk's graph is its activity, reads and writes together.
   function graphicValues(item) {
-    if (!stats) return []
-    return item === "cpu" ? stats.cpuHistory : item === "gpu" ? stats.gpuHistory : []
+    if (!stats || style(item) !== "graph") return []
+    if (item === "cpu") return stats.cpuHistory
+    if (item === "gpu") return stats.gpuHistory
+    if (item === "memory") return stats.memoryHistory
+    var reads = stats.diskReadHistory.slice(-10)
+    var writes = stats.diskWriteHistory.slice(-10)
+    var totals = []
+    var peak = diskGraphFloor
+    for (var i = 0; i < reads.length; i++) {
+      totals.push(reads[i] + (writes[i] || 0))
+      if (totals[i] > peak) peak = totals[i]
+    }
+    return totals.map(function(total) { return total / peak })
   }
 
-  // The fainter second part: memory the kernel is only using as cache.
+  // The fainter second part of the memory gauge: memory the kernel is only
+  // using as cache.
   function graphicExtra(item) {
     if (item !== "memory" || !stats || !(stats.memory.total > 0)) return 0
     return stats.memory.cache / stats.memory.total
   }
 
-  // With a graph in place of the number, hovering still gives the number.
+  // Where the bar shows no number, hovering gives it.
   function barTooltip(item) {
     var value = reading(item)
-    if (display !== "graphs" || value < 0) return ""
+    var chosen = style(item)
+    var numbered = chosen === "percentage" || chosen === "icon and percentage" || (drawn(item) && showPercentage)
+    if (numbered || value < 0) return ""
     return translations.t(item + ".title") + " " + percentText(value, 0)
   }
 
@@ -246,17 +289,21 @@ Panel {
         id: button
 
         required property string modelData
+        readonly property string style: root.style(modelData)
         readonly property bool known: root.reading(modelData) >= 0
-        readonly property bool graphed: root.display === "graphs" && known
+        // Graphs, gauges, pies and bare percentages are laid out below; the
+        // two icon styles are the button's own icon and label.
+        readonly property bool graphed: known && root.drawn(modelData)
+        readonly property bool numbered: known && (style === "percentage" || (graphed && root.showPercentage))
+        readonly property bool custom: graphed || numbered
         readonly property color ink: active ? root.urgent : root.foreground
 
         bar: root.bar
-        // A graph stands in for the icon.
-        text: graphed ? "" : root.icons[modelData]
+        text: custom ? "" : root.icons[modelData]
         hasVisualContent: true
-        labelText: root.display === "percentages" ? root.barLabel(modelData) : ""
-        slotSize: graphed ? graphic.implicitWidth + Style.bar.iconSlot - Style.bar.iconCanvas
-          : root.display === "percentages" && known ? root.labelSlot
+        labelText: style === "icon and percentage" ? root.barLabel(modelData) : ""
+        slotSize: custom ? reading.implicitWidth + Style.bar.iconSlot - Style.bar.iconCanvas
+          : style === "icon and percentage" && known ? root.labelSlot
           : Style.bar.iconSlot
         active: root.alarming(modelData)
         dimmed: !known
@@ -270,16 +317,36 @@ Panel {
           }
         }
 
-        BarGraphic {
-          id: graphic
-          visible: button.graphed
+        Row {
+          id: reading
+          visible: button.custom
           anchors.centerIn: parent
+          spacing: Style.space(4)
           scale: button.pressScale
-          kind: root.graphicKind(button.modelData)
-          color: button.ink
-          values: root.graphicValues(button.modelData)
-          fraction: Math.max(0, root.reading(button.modelData))
-          extra: root.graphicExtra(button.modelData)
+
+          Text {
+            visible: button.numbered
+            anchors.verticalCenter: parent.verticalCenter
+            // As wide as "100%", so nothing shifts as the reading changes.
+            width: Math.ceil(labelMetrics.advanceWidth)
+            horizontalAlignment: Text.AlignRight
+            textFormat: Text.PlainText
+            text: root.percentText(Math.max(0, root.reading(button.modelData)), 0)
+            font.family: root.fontFamily
+            font.pixelSize: Style.bar.iconFont
+            color: button.ink
+            renderType: Text.NativeRendering
+          }
+
+          BarGraphic {
+            visible: button.graphed
+            anchors.verticalCenter: parent.verticalCenter
+            kind: root.graphicKind(button.modelData)
+            color: button.ink
+            values: root.graphicValues(button.modelData)
+            fraction: Math.max(0, root.reading(button.modelData))
+            extra: root.graphicExtra(button.modelData)
+          }
         }
       }
     }

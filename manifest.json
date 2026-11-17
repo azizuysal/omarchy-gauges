@@ -17,57 +17,98 @@
   },
   "barWidget": {
     "displayName": "System monitor",
-    "description": "Live CPU, memory, GPU and disk readings as small graphs, each opening a detail panel.",
+    "description": "Live CPU, memory, GPU and disk readings as graphs, gauges, numbers or icons, each opening a detail panel.",
     "category": "System",
     "allowMultiple": true,
     "defaultSection": "right",
     "defaults": {
-      "items": [],
-      "display": "Graphs"
+      "cpu": "Graph",
+      "memory": "Gauge",
+      "gpu": "Graph",
+      "disk": "Pie",
+      "showPercentage": false,
+      "warnAt": 90
     },
     "schema": [
       {
-        "key": "items",
-        "type": "multiselect",
-        "label": "Readings",
-        "description": "Choose which readings this widget shows. Leave empty to show them all. Add the widget more than once to place readings in different parts of the bar.",
-        "noSelectionText": "All readings",
-        "placeholderText": "Search readings...",
-        "emptyText": "No readings",
+        "key": "cpu",
+        "type": "enum",
+        "label": "CPU",
         "options": [
-          {
-            "value": "cpu",
-            "label": "CPU",
-            "description": "Processor load"
-          },
-          {
-            "value": "memory",
-            "label": "Memory",
-            "description": "Memory in use"
-          },
-          {
-            "value": "gpu",
-            "label": "GPU",
-            "description": "Graphics card load"
-          },
-          {
-            "value": "disk",
-            "label": "Disk",
-            "description": "Space used on the system disk"
-          }
-        ]
+          "Graph",
+          "Gauge",
+          "Pie",
+          "Percentage",
+          "Icon",
+          "Icon and percentage",
+          "Off"
+        ],
+        "defaultValue": "Graph",
+        "description": "How processor load is shown in the bar. Graph draws recent load; Gauge and Pie draw the current level; Off leaves it out."
       },
       {
-        "key": "display",
+        "key": "memory",
         "type": "enum",
-        "label": "Show readings as",
+        "label": "Memory",
         "options": [
-          "Graphs",
-          "Percentages",
-          "Icons"
+          "Graph",
+          "Gauge",
+          "Pie",
+          "Percentage",
+          "Icon",
+          "Icon and percentage",
+          "Off"
         ],
-        "defaultValue": "Graphs",
-        "description": "Graphs draws a small history graph for CPU and GPU, an upright gauge for memory and a pie for disk. Percentages shows each icon with its number. Icons shows the icon alone."
+        "defaultValue": "Gauge",
+        "description": "How memory in use is shown in the bar. Graph draws recent use; Gauge and Pie draw the current level; Off leaves it out."
+      },
+      {
+        "key": "gpu",
+        "type": "enum",
+        "label": "GPU",
+        "options": [
+          "Graph",
+          "Gauge",
+          "Pie",
+          "Percentage",
+          "Icon",
+          "Icon and percentage",
+          "Off"
+        ],
+        "defaultValue": "Graph",
+        "description": "How graphics load is shown in the bar. Graph draws recent load; Gauge and Pie draw the current level; Off leaves it out."
+      },
+      {
+        "key": "disk",
+        "type": "enum",
+        "label": "Disk",
+        "options": [
+          "Graph",
+          "Gauge",
+          "Pie",
+          "Percentage",
+          "Icon",
+          "Icon and percentage",
+          "Off"
+        ],
+        "defaultValue": "Pie",
+        "description": "How space used on the system disk is shown in the bar. Graph draws recent read and write activity; Gauge and Pie draw the current level; Off leaves it out."
+      },
+      {
+        "key": "showPercentage",
+        "type": "boolean",
+        "label": "Show the percentage beside graphs, gauges and pies",
+        "defaultValue": false
+      },
+      {
+        "key": "warnAt",
+        "type": "integer",
+        "label": "Warning level (%)",
+        "min": 50,
+        "max": 100,
+        "step": 5,
+        "defaultValue": 90,
+        "description": "Memory and disk turn the warning colour when this full."
       }
     ]
   }

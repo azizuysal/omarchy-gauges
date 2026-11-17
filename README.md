@@ -38,20 +38,43 @@ Drag the widget along the bar to move it, or use `omarchy bar move azizuysal.sys
 
 ### Settings
 
-Set these with `omarchy bar set azizuysal.sysmon <key> <value>` or in the
-shell's settings panel.
+Set these in the shell's settings panel, or with
+`omarchy bar set azizuysal.sysmon <key> <value>`. They are stored with the
+rest of the bar layout in `~/.config/omarchy/shell.json`.
 
 | Key | Default | Meaning |
 |---|---|---|
-| `items` | all | Which readings to show: any of `cpu`, `memory`, `gpu`, `disk` |
-| `display` | `Graphs` | How readings are shown: `Graphs` (a history graph for CPU and GPU, an upright gauge for memory, a pie for disk), `Percentages` (icon and number), or `Icons` |
+| `cpu` | `Graph` | How processor load is shown |
+| `memory` | `Gauge` | How memory in use is shown |
+| `gpu` | `Graph` | How graphics load is shown |
+| `disk` | `Pie` | How space on the system disk is shown |
+| `showPercentage` | `false` | Put the percentage beside graphs, gauges and pies |
+| `warnAt` | `90` | Memory and disk turn the warning colour when this full (%) |
+
+Each reading takes one of these styles:
+
+| Style | What it draws |
+|---|---|
+| `Graph` | The last ten readings as a bar graph. For disk this is read and write activity, since free space hardly moves. |
+| `Gauge` | An upright gauge filling from the bottom. Memory's shows cache as a fainter band. |
+| `Pie` | A pie of the current level |
+| `Percentage` | The number alone |
+| `Icon` | The icon alone |
+| `Icon and percentage` | Both |
+| `Off` | Leaves the reading out of the bar |
 
 ```bash
-omarchy bar set azizuysal.sysmon items '["cpu","memory"]' --json
+omarchy bar set azizuysal.sysmon memory Graph
+omarchy bar set azizuysal.sysmon gpu Off
+omarchy bar set azizuysal.sysmon showPercentage true --json
 ```
 
+Hovering a reading that shows no number gives its percentage. On a vertical
+bar every reading is shown as its icon.
+
 The widget can be added to the bar more than once, each copy with its own
-`items`, to place readings in different parts of the bar.
+settings, to place readings in different parts of the bar: turn the readings
+a copy should not show to `Off`.
 
 ### Keybindings
 
@@ -65,12 +88,12 @@ o.bind("SUPER CTRL, M", "System monitor", "omarchy-shell sysmon toggle")
 
 ## What the bar shows
 
-| Reading | Drawn as | Value | Turns the warning colour |
+| Reading | By default | Value | Turns the warning colour |
 |---|---|---|---|
-| CPU | History graph | Share of processor time in use | Never |
-| Memory | Upright gauge | Memory programs hold, with cache fainter above it | At 90% |
-| GPU | History graph | Load of the busiest card that reports it | Never |
-| Disk | Pie | Space used on the root filesystem | At 90% |
+| CPU | Graph | Share of processor time in use | Never |
+| Memory | Gauge | Memory programs hold, not counting cache | At `warnAt` |
+| GPU | Graph | Load of the busiest card that reports it | Never |
+| Disk | Pie | Space used on the root filesystem | At `warnAt` |
 
 The GPU item is left out on a machine whose graphics report no load.
 
