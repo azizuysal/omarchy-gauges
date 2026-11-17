@@ -25,7 +25,7 @@ omarchy plugin validate "$source_dir"
 
 mkdir -p "$target"
 rsync -a --delete \
-  --exclude .git --exclude tests --exclude dev-install --exclude '*.md' \
+  --exclude .git --exclude tests --exclude dev-install --exclude '*.md' --exclude screenshots \
   "$source_dir/" "$target/"
 
 omarchy-shell shell rescanPlugins >/dev/null

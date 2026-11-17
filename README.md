@@ -4,6 +4,12 @@ CPU, memory, GPU, disk and network readings in the Omarchy bar. Each one opens a
 panel in the style of Omarchy's own battery and display panels, and follows
 whatever theme is active.
 
+![The five gauges in the Omarchy bar](screenshots/bar.png)
+
+Each reading can be drawn as a graph, a gauge, a pie, a number or an icon:
+
+![Two other mixes of styles](screenshots/styles.png)
+
 - **CPU**: load, two minutes of history, per-core bars, temperature, load
   average, uptime, and the programs using the most processor.
 - **Memory**: used and cached memory, history, swap, and the programs holding
@@ -20,7 +26,7 @@ Requires Omarchy 4.5 or later.
 ## Install
 
 ```bash
-omarchy plugin add https://github.com/OWNER/omarchy-gauges.git --enable
+omarchy plugin add https://github.com/azizuysal/omarchy-gauges.git --enable
 ```
 
 Update with `omarchy plugin update azizuysal.gauges`, remove with
