@@ -43,7 +43,7 @@ shell's settings panel.
 | Key | Default | Meaning |
 |---|---|---|
 | `items` | all | Which readings to show: any of `cpu`, `memory`, `gpu`, `disk` |
-| `display` | `Graphs` | How readings are shown: `Graphs` (a history graph for CPU and GPU, an upright gauge for memory, a capacity bar for disk), `Percentages` (icon and number), or `Icons` |
+| `display` | `Graphs` | How readings are shown: `Graphs` (a history graph for CPU and GPU, an upright gauge for memory, a pie for disk), `Percentages` (icon and number), or `Icons` |
 
 ```bash
 omarchy bar set azizuysal.sysmon items '["cpu","memory"]' --json

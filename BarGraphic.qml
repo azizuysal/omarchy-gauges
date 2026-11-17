@@ -6,7 +6,7 @@ import qs.Commons
 //   "history"  the last few readings as a bar graph (processor, graphics)
 //   "column"   an upright gauge filling from the bottom, with an optional
 //              fainter second part above it (memory in use, then cache)
-//   "level"    a capacity bar filling from the side (disk space)
+//   "pie"      how much of a whole is taken (disk space)
 //
 // Sized from the bar's icon height so it follows the bar's scale.
 Canvas {
@@ -16,7 +16,7 @@ Canvas {
   property color color: "white"
   // "history": readings from 0 to 1, oldest first.
   property var values: []
-  // "column" and "level": the solid part, and for the column a fainter part
+  // "column" and "pie": the solid part, and for the column a fainter part
   // after it.
   property real fraction: 0
   property real extra: 0
@@ -28,8 +28,8 @@ Canvas {
 
   implicitHeight: Style.bar.iconSize
   implicitWidth: kind === "history" ? bars * barWidth + (bars - 1) * barGap
-    : kind === "level" ? 20 * unit
-    : 7 * unit
+    : kind === "column" ? 7 * unit
+    : implicitHeight
   width: implicitWidth
   height: implicitHeight
 
@@ -86,8 +86,6 @@ Canvas {
     context.restore()
   }
 
-  // Corners only slightly rounded: with fully round ends a nearly empty bar
-  // reads as a toggle switch.
   function slab(context, x, y, w, h) {
     var r = Math.min(1.5 * unit, w / 2, h / 2)
     context.beginPath()
@@ -99,16 +97,23 @@ Canvas {
     context.closePath()
   }
 
-  function paintLevel(context) {
-    var tall = 8 * unit
-    var y = (height - tall) / 2
-    slab(context, 0, y, width, tall)
+  function paintPie(context) {
+    var cx = width / 2
+    var cy = height / 2
+    var radius = Math.min(width, height) / 2
+    var top = -Math.PI / 2
+    var used = clamp(fraction)
+
+    context.beginPath()
+    context.arc(cx, cy, radius, 0, Math.PI * 2)
     context.fillStyle = tint(0.18)
     context.fill()
-    var filled = clamp(fraction) * width
-    if (filled <= 0) return
-    // Never a sliver too thin to see.
-    slab(context, 0, y, Math.max(2 * unit, filled), tall)
+    if (used <= 0) return
+
+    context.beginPath()
+    context.moveTo(cx, cy)
+    context.arc(cx, cy, radius, top, top + used * Math.PI * 2)
+    context.closePath()
     context.fillStyle = tint(1)
     context.fill()
   }
@@ -118,6 +123,6 @@ Canvas {
     context.reset()
     if (kind === "history") paintHistory(context)
     else if (kind === "column") paintColumn(context)
-    else paintLevel(context)
+    else paintPie(context)
   }
 }

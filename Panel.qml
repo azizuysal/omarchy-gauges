@@ -196,7 +196,7 @@ Panel {
 
   // What the small graph beside an icon draws; see BarGraphic.
   function graphicKind(item) {
-    return item === "memory" ? "column" : item === "disk" ? "level" : "history"
+    return item === "memory" ? "column" : item === "disk" ? "pie" : "history"
   }
 
   function graphicValues(item) {

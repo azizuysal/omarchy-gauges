@@ -67,7 +67,7 @@
           "Icons"
         ],
         "defaultValue": "Graphs",
-        "description": "Graphs draws a small history graph for CPU and GPU, an upright gauge for memory and a capacity bar for disk. Percentages shows each icon with its number. Icons shows the icon alone."
+        "description": "Graphs draws a small history graph for CPU and GPU, an upright gauge for memory and a pie for disk. Percentages shows each icon with its number. Icons shows the icon alone."
       }
     ]
   }
