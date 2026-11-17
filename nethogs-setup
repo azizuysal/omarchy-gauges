@@ -1,0 +1,70 @@
+#!/bin/bash
+
+# Lets the network panel name every program using the network.
+#
+# Usage: sudo ./nethogs-setup            set up
+#        sudo ./nethogs-setup --remove   undo
+#
+# The panel's list of programs comes from nethogs, which has to capture
+# packets to see who is sending what. This installs nethogs if it is missing,
+# gives it the capabilities to do that without root, and adds a pacman hook
+# that gives them back whenever nethogs is updated (an update replaces the
+# file, and the capabilities with it).
+#
+# Know what you are granting: afterwards any user on this machine can run
+# nethogs and see which programs are talking on the network.
+#
+# Without this the plugin still works; the list is then limited to the TCP
+# connections of your own programs.
+
+set -euo pipefail
+
+readonly capabilities="cap_net_admin,cap_net_raw,cap_dac_read_search,cap_sys_ptrace+pe"
+readonly hook=/etc/pacman.d/hooks/sysmon-nethogs-capabilities.hook
+
+if [[ $EUID -ne 0 ]]; then
+  echo "This changes system files, so it needs root: sudo $0 $*" >&2
+  exit 1
+fi
+
+if [[ ${1:-} == --remove ]]; then
+  rm -f "$hook"
+  binary=$(command -v nethogs || true)
+  [[ -n $binary ]] && setcap -r "$binary" 2>/dev/null || true
+  echo "Removed the hook and nethogs' capabilities. nethogs itself is still installed;"
+  echo "remove it with: pacman -Rns nethogs"
+  exit 0
+fi
+
+if ! command -v nethogs >/dev/null 2>&1; then
+  if command -v pacman >/dev/null 2>&1; then
+    pacman -S --needed --noconfirm nethogs
+  else
+    echo "nethogs is not installed, and there is no pacman to install it with." >&2
+    exit 1
+  fi
+fi
+
+binary=$(command -v nethogs)
+setcap "$capabilities" "$binary"
+
+if command -v pacman >/dev/null 2>&1; then
+  install -d /etc/pacman.d/hooks
+  cat >"$hook" <<EOF
+# Installed by the Omarchy Sysmon plugin's nethogs-setup.
+# An update replaces nethogs and drops its capabilities; this puts them back.
+[Trigger]
+Operation = Install
+Operation = Upgrade
+Type = Package
+Target = nethogs
+
+[Action]
+Description = Restoring nethogs' capture capabilities for Sysmon...
+When = PostTransaction
+Exec = /usr/bin/setcap $capabilities $binary
+EOF
+fi
+
+echo "Done: $(getcap "$binary")"
+echo "Open the network panel again to see every program."
