@@ -5,8 +5,8 @@ import qs.Commons as Commons
 import qs.Ui
 import "Model.js" as Model
 
-// The bar item: one icon and reading per metric, each opening the same
-// popup on its own detail view. Readings come from Service.qml, which the
+// The bar item: one icon per metric with a small graph (or the percentage)
+// beside it, each opening the same popup on its own detail view. Readings come from Service.qml, which the
 // shell runs once however many bars (monitors) show this widget.
 Panel {
   id: root
@@ -54,7 +54,13 @@ Panel {
 
   // ---- settings
   readonly property bool vertical: bar ? bar.vertical : false
-  readonly property bool showValues: setting("showValues", true) !== false && !vertical
+  // "graphs", "percentages" or "icons". A vertical bar is too narrow for
+  // anything beside the icon.
+  readonly property string display: {
+    if (vertical) return "icons"
+    var chosen = String(setting("display", "Graphs")).toLowerCase()
+    return chosen === "percentages" || chosen === "icons" ? chosen : "graphs"
+  }
   // A property of its own so `items` only changes when a card appears or
   // goes, not on every sample: a new list rebuilds every bar button.
   readonly property bool hasGpu: stats ? stats.gpus.length > 0 : false
@@ -188,6 +194,29 @@ Panel {
     return (item === "memory" || item === "disk") && reading(item) >= 0.9
   }
 
+  // What the small graph beside an icon draws; see BarGraphic.
+  function graphicKind(item) {
+    return item === "memory" ? "pie" : item === "disk" ? "level" : "history"
+  }
+
+  function graphicValues(item) {
+    if (!stats) return []
+    return item === "cpu" ? stats.cpuHistory : item === "gpu" ? stats.gpuHistory : []
+  }
+
+  // The fainter second slice: memory the kernel is only using as cache.
+  function graphicExtra(item) {
+    if (item !== "memory" || !stats || !(stats.memory.total > 0)) return 0
+    return stats.memory.cache / stats.memory.total
+  }
+
+  // With a graph in place of the number, hovering still gives the number.
+  function barTooltip(item) {
+    var value = reading(item)
+    if (display !== "graphs" || value < 0) return ""
+    return translations.t(item + ".title") + " " + percentText(value, 0)
+  }
+
   TextMetrics {
     id: labelMetrics
     font.family: root.bar ? root.bar.fontFamily : Style.font.family
@@ -213,22 +242,58 @@ Panel {
       model: root.items
 
       BarIconButton {
+        id: button
+
         required property string modelData
-        readonly property string label: root.showValues ? root.barLabel(modelData) : ""
+        readonly property bool known: root.reading(modelData) >= 0
+        readonly property bool graphed: root.display === "graphs" && known
+        readonly property color ink: active ? root.urgent : root.foreground
 
         bar: root.bar
-        text: root.icons[modelData]
-        labelText: label
-        slotSize: root.showValues && root.reading(modelData) >= 0 ? root.labelSlot : Style.bar.iconSlot
+        // With a graph the icon is drawn below, beside it, rather than by the
+        // button, which would centre it in the slot.
+        text: graphed ? "" : root.icons[modelData]
+        hasVisualContent: true
+        labelText: root.display === "percentages" ? root.barLabel(modelData) : ""
+        slotSize: graphed ? Style.bar.iconSlot + graphic.implicitWidth + Style.space(4)
+          : root.display === "percentages" && known ? root.labelSlot
+          : Style.bar.iconSlot
         active: root.alarming(modelData)
-        dimmed: root.reading(modelData) < 0
-        tooltipText: ""
+        dimmed: !known
+        tooltipText: root.barTooltip(modelData)
         onPressed: function(button) {
           if (button === Qt.RightButton) {
             if (root.bar) root.bar.run("omarchy-launch-or-focus-tui btop")
             root.close()
           } else {
             root.show(modelData)
+          }
+        }
+
+        Row {
+          visible: button.graphed
+          anchors.centerIn: parent
+          spacing: Style.space(4)
+          scale: button.pressScale
+
+          BarGraphic {
+            id: graphic
+            anchors.verticalCenter: parent.verticalCenter
+            kind: root.graphicKind(button.modelData)
+            color: button.ink
+            values: root.graphicValues(button.modelData)
+            fraction: Math.max(0, root.reading(button.modelData))
+            extra: root.graphicExtra(button.modelData)
+          }
+
+          OpticalGlyph {
+            width: Style.bar.iconCanvas
+            height: Style.bar.iconCanvas
+            text: root.icons[button.modelData]
+            fontFamily: root.fontFamily
+            fontSize: Style.bar.iconFont
+            paintedSize: Style.bar.iconSize
+            color: button.ink
           }
         }
       }

@@ -5,7 +5,7 @@
   "version": "0.1.0",
   "author": "Aziz Uysal",
   "license": "MIT",
-  "description": "CPU, memory, GPU and disk readings in the bar, each with a detail panel: history graphs, per-core load, temperatures, top processes and volumes.",
+  "description": "CPU, memory, GPU and disk in the bar as small live graphs, each with a detail panel: history graphs, per-core load, temperatures, top processes and volumes.",
   "kinds": [
     "service",
     "bar-widget"
@@ -17,13 +17,13 @@
   },
   "barWidget": {
     "displayName": "System monitor",
-    "description": "Live CPU, memory, GPU and disk readings, each opening a detail panel.",
+    "description": "Live CPU, memory, GPU and disk readings as small graphs, each opening a detail panel.",
     "category": "System",
     "allowMultiple": true,
     "defaultSection": "right",
     "defaults": {
       "items": [],
-      "showValues": true
+      "display": "Graphs"
     },
     "schema": [
       {
@@ -35,17 +35,39 @@
         "placeholderText": "Search readings...",
         "emptyText": "No readings",
         "options": [
-          { "value": "cpu", "label": "CPU", "description": "Processor load" },
-          { "value": "memory", "label": "Memory", "description": "Memory in use" },
-          { "value": "gpu", "label": "GPU", "description": "Graphics card load" },
-          { "value": "disk", "label": "Disk", "description": "Space used on the system disk" }
+          {
+            "value": "cpu",
+            "label": "CPU",
+            "description": "Processor load"
+          },
+          {
+            "value": "memory",
+            "label": "Memory",
+            "description": "Memory in use"
+          },
+          {
+            "value": "gpu",
+            "label": "GPU",
+            "description": "Graphics card load"
+          },
+          {
+            "value": "disk",
+            "label": "Disk",
+            "description": "Space used on the system disk"
+          }
         ]
       },
       {
-        "key": "showValues",
-        "type": "boolean",
-        "label": "Show the percentage beside each icon",
-        "defaultValue": true
+        "key": "display",
+        "type": "enum",
+        "label": "Beside each icon",
+        "options": [
+          "Graphs",
+          "Percentages",
+          "Icons"
+        ],
+        "defaultValue": "Graphs",
+        "description": "Graphs draws a small history graph for CPU and GPU, a pie for memory and a capacity bar for disk. Percentages shows the number instead. Icons shows the icon alone."
       }
     ]
   }
