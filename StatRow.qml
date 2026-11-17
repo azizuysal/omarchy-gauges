@@ -1,0 +1,36 @@
+import QtQuick
+import qs.Commons
+
+// A label on the leading edge and its reading on the trailing one.
+Item {
+  id: root
+
+  property var ctx: null
+  property string label: ""
+  property string value: ""
+  property color valueColor: ctx ? ctx.foreground : "transparent"
+
+  width: parent ? parent.width : implicitWidth
+  implicitHeight: Math.max(labelText.implicitHeight, valueText.implicitHeight)
+
+  Label {
+    id: labelText
+    ctx: root.ctx
+    dim: true
+    text: root.label
+    anchors.left: parent.left
+    anchors.right: valueText.left
+    anchors.rightMargin: Style.space(8)
+    anchors.verticalCenter: parent.verticalCenter
+  }
+
+  Label {
+    id: valueText
+    ctx: root.ctx
+    text: root.value !== "" ? root.value : "—"
+    color: root.valueColor
+    elide: Text.ElideNone
+    anchors.right: parent.right
+    anchors.verticalCenter: parent.verticalCenter
+  }
+}

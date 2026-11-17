@@ -1,0 +1,52 @@
+{
+  "schemaVersion": 1,
+  "id": "azizuysal.sysmon",
+  "name": "Sysmon",
+  "version": "0.1.0",
+  "author": "Aziz Uysal",
+  "license": "MIT",
+  "description": "CPU, memory, GPU and disk readings in the bar, each with a detail panel: history graphs, per-core load, temperatures, top processes and volumes.",
+  "kinds": [
+    "service",
+    "bar-widget"
+  ],
+  "keepLoaded": true,
+  "entryPoints": {
+    "service": "Service.qml",
+    "barWidget": "Panel.qml"
+  },
+  "barWidget": {
+    "displayName": "System monitor",
+    "description": "Live CPU, memory, GPU and disk readings, each opening a detail panel.",
+    "category": "System",
+    "allowMultiple": true,
+    "defaultSection": "right",
+    "defaults": {
+      "items": [],
+      "showValues": true
+    },
+    "schema": [
+      {
+        "key": "items",
+        "type": "multiselect",
+        "label": "Readings",
+        "description": "Choose which readings this widget shows. Leave empty to show them all. Add the widget more than once to place readings in different parts of the bar.",
+        "noSelectionText": "All readings",
+        "placeholderText": "Search readings...",
+        "emptyText": "No readings",
+        "options": [
+          { "value": "cpu", "label": "CPU", "description": "Processor load" },
+          { "value": "memory", "label": "Memory", "description": "Memory in use" },
+          { "value": "gpu", "label": "GPU", "description": "Graphics card load" },
+          { "value": "disk", "label": "Disk", "description": "Space used on the system disk" }
+        ]
+      },
+      {
+        "key": "showValues",
+        "type": "boolean",
+        "label": "Show the percentage beside each icon",
+        "defaultValue": true
+      }
+    ]
+  }
+}

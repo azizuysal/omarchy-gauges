@@ -1,0 +1,45 @@
+#!/bin/bash
+
+# Copies this checkout into Omarchy's plugin directory and enables it, for
+# trying changes without publishing. The shell reloads plugin code on its own
+# whenever the copy changes, but it can keep serving QML it has already
+# compiled, so pass --restart to be sure an edit is the code that runs.
+#
+# Usage: ./dev-install [--restart | --remove]
+
+set -euo pipefail
+
+source_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+id=$(jq -r '.id' "$source_dir/manifest.json")
+target="$HOME/.config/omarchy/plugins/$id"
+
+if [[ ${1:-} == --remove ]]; then
+  omarchy plugin disable "$id" >/dev/null 2>&1 || true
+  rm -rf "$target"
+  omarchy-shell shell rescanPlugins >/dev/null 2>&1 || true
+  echo "Removed $id"
+  exit 0
+fi
+
+omarchy plugin validate "$source_dir"
+
+mkdir -p "$target"
+rsync -a --delete \
+  --exclude .git --exclude tests --exclude dev-install --exclude '*.md' \
+  "$source_dir/" "$target/"
+
+omarchy-shell shell rescanPlugins >/dev/null
+
+if ! omarchy plugin list --json | jq -e --arg id "$id" 'any(.[]; .id == $id and (.enabled // false))' >/dev/null 2>&1; then
+  for (( attempt = 0; attempt < 40; attempt++ )); do
+    omarchy plugin list --json | jq -e --arg id "$id" 'any(.[]; .id == $id)' >/dev/null 2>&1 && break
+    sleep 0.05
+  done
+  omarchy plugin enable "$id" || true
+fi
+
+if [[ ${1:-} == --restart ]]; then
+  omarchy restart shell >/dev/null 2>&1
+fi
+
+echo "Installed $id into $target"
