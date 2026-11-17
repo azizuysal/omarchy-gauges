@@ -137,10 +137,7 @@ Reports from other hardware are very welcome.
   `/proc/<pid>/fdinfo`. Only your own programs are visible, so graphics work
   done by another user's processes is not counted.
 - The network panel's list of programs is built from the byte counts of TCP
-  connections (`ss`), which is what Linux shows without root. Traffic over
-  UDP, which includes QUIC and so much of a browser's, has no such counts,
-  and other users' connections carry no program name; both appear as
-  "Other". The list is read only while the network panel is open.
+  connections (`ss`), read only while the panel is open.
 - Network speed counts interfaces with a real device behind them, so VPN
   and loopback traffic is not counted twice.
 - A discrete card that is powered down is shown as asleep and left alone,
