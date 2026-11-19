@@ -109,28 +109,40 @@ sudo ~/.config/omarchy/plugins/azizuysal.gauges/nethogs-setup
 ```
 
 It installs `nethogs` if it is missing, gives it the capabilities to capture
-packets without root, and adds a pacman hook
-(`/etc/pacman.d/hooks/gauges-nethogs-capabilities.hook`) that restores them
-whenever `nethogs` is updated, since an update would otherwise drop them.
+packets without root, and adds two pacman hooks
+(`/etc/pacman.d/hooks/gauges-nethogs-capabilities.hook` and
+`gauges-nethogs-capabilities-check.hook`) that restore them whenever
+`nethogs` is updated, since an update would otherwise drop them.
 
 Afterwards any user on the machine can run `nethogs` and see which programs
 are talking on the network.
 
-It manages only the capabilities it added itself. Any of the four that
-`nethogs` already had, and any other capability, are never set, restored or
-removed by it. Which ones it added is written down in
-`/var/lib/gauges/nethogs-capabilities.added`; the hook grants those again
-after a `nethogs` update, on top of whatever `nethogs` has by then. A hook
-file of that name which the script did not write is left alone (setup stops
-instead of overwriting it).
+The script follows an all-or-nothing rule, so it never mixes its settings
+with an administrator's:
 
-Undo it with `sudo nethogs-setup --remove`. That takes away the capabilities
-the script added, then deletes its hook and its record. If taking them away
-fails it stops with an error and keeps both, so it can be run again. On a
-machine that never ran setup it changes nothing.
+- It gives `nethogs` capabilities only when `nethogs` has none, and then
+  exactly the four it needs. If `nethogs` already has any, it stops, changes
+  nothing and tells you what the panel needs.
+- It notes that it did so in `/var/lib/gauges/nethogs-capabilities.set`,
+  written before the capabilities are granted.
+- After a `nethogs` update, its hook grants them again only if that note is
+  still there and the new file has no capabilities. A second hook runs
+  before the update and drops the note if the capabilities are no longer
+  exactly the ones the script granted, so a change you made by hand is never
+  undone by an update.
+- Hook files of those names that the script did not write are left alone
+  (setup stops instead of overwriting them).
 
-Because the hook grants the recorded capabilities again after every update,
-use `--remove` to take them away for good, not `setcap` by hand.
+Undo it with `sudo nethogs-setup --remove`. It clears the capabilities only
+if they are exactly the set the script granted and its note is there;
+otherwise it leaves them alone and prints the command to clear them
+yourself. It then deletes its hooks and its note. If clearing fails it stops
+with an error and keeps both, so it can be run again. On a machine that
+never ran setup it changes nothing.
+
+If you ran setup with Gauges 1.0.0, there is no such note, so the script
+will not touch the capabilities it set back then. To hand them over to it:
+`sudo setcap -r "$(realpath "$(command -v nethogs)")"`, then run setup again.
 
 ## What the bar shows
 
