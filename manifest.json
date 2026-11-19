@@ -28,6 +28,7 @@
       "disk": "Pie",
       "network": "Graph",
       "showPercentage": false,
+      "showPublicAddress": false,
       "warnAt": 90
     },
     "schema": [
@@ -113,6 +114,13 @@
         "type": "boolean",
         "label": "Show the number beside graphs, gauges and pies",
         "defaultValue": false
+      },
+      {
+        "key": "showPublicAddress",
+        "type": "boolean",
+        "label": "Show public address",
+        "defaultValue": false,
+        "description": "Shows the address the internet sees you at, with its country's flag, in the network panel. Finding it asks Cloudflare (https://1.1.1.1/cdn-cgi/trace) each time the panel is opened, at most once every ten minutes. Off, nothing is asked."
       },
       {
         "key": "warnAt",

@@ -82,6 +82,7 @@ Item {
   }
   onNetWatchersChanged: {
     if (netWatchers > 0) {
+      if (!addressProc.running) addressProc.running = true
       if (netTool === "") nethogsProbe.running = true
       else if (netTool === "ss" && !socketProc.running) socketProc.running = true
     } else {
@@ -93,6 +94,44 @@ Item {
     }
   }
   property var _previousSockets: null
+
+  // The addresses each interface holds, { name: { v4, v6 } }. Read while a
+  // network panel is open.
+  property var netAddresses: ({})
+  property bool _addressesRead: false
+
+  // ---- public address
+  // The address the internet sees, and the country it is placed in. Finding
+  // out means asking a server outside this machine, so nothing here runs
+  // unless a bar item has "Show public address" turned on, and then only
+  // while its network panel is open.
+  property string publicAddress: ""
+  property string publicCountry: ""
+  // "" before any lookup, then "loading", "ok" or "failed".
+  property string publicState: ""
+  property int publicWatchers: 0
+  function watchPublicAddress(on) {
+    publicWatchers = Math.max(0, publicWatchers + (on ? 1 : -1))
+  }
+  onPublicWatchersChanged: refreshPublicAddress()
+  // When the last lookup finished, and the local addresses at the time: an
+  // answer is kept for ten minutes, a failure for half a minute, and neither
+  // outlives a change of connection.
+  property double _publicAt: 0
+  property string _publicFor: ""
+  function refreshPublicAddress() {
+    if (publicWatchers === 0 || !_addressesRead || publicProc.running) return
+    var sameConnection = _publicFor === JSON.stringify(netAddresses)
+    var age = Date.now() - _publicAt
+    if (sameConnection && publicState === "ok" && age < 600000) return
+    if (sameConnection && publicState === "failed" && age < 30000) return
+    if (!sameConnection || publicState !== "ok") {
+      publicAddress = ""
+      publicCountry = ""
+      publicState = "loading"
+    }
+    publicProc.running = true
+  }
   property double _previousSocketsAt: 0
   property var _nethogsLines: []
 
@@ -266,6 +305,46 @@ Item {
     stdout: StdioCollector {
       waitForEnd: true
       onStreamFinished: root.diskTemps = Model.parseTemps(text.split("\n")).disks
+    }
+  }
+
+  // Which addresses the interfaces hold. Only while a network panel is open.
+  Process {
+    id: addressProc
+    command: ["ip", "-j", "addr"]
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: {
+        root.netAddresses = Model.parseAddresses(text)
+        root._addressesRead = true
+        root.refreshPublicAddress()
+      }
+    }
+  }
+
+  Timer {
+    interval: 10000
+    running: root.netWatchers > 0
+    repeat: true
+    onTriggered: if (!addressProc.running) addressProc.running = true
+  }
+
+  // The one request this plugin makes outside the machine, and only when
+  // asked to: see publicAddress above. One reply carries both the address
+  // and the country.
+  Process {
+    id: publicProc
+    command: ["curl", "-fsS", "--max-time", "5", "--proto", "=https", "https://1.1.1.1/cdn-cgi/trace"]
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: {
+        var found = Model.parseTrace(text)
+        root.publicAddress = found.address
+        root.publicCountry = found.address !== "" ? found.country : ""
+        root.publicState = found.address !== "" ? "ok" : "failed"
+        root._publicAt = Date.now()
+        root._publicFor = JSON.stringify(root.netAddresses)
+      }
     }
   }
 

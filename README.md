@@ -19,7 +19,9 @@ Each reading can be drawn as a graph, a gauge, a pie, a number or an icon:
 - **Disk**: space on each volume, read and write activity, and drive
   temperature.
 - **Network**: download and upload speed, history, the programs using the
-  network most, and each interface's speed and traffic since startup.
+  network most, and each interface's speed, traffic since startup and
+  addresses. Optionally the address the internet sees you at, with its
+  country's flag. Click an address to copy it.
 
 Requires Omarchy 4.5 or later.
 
@@ -58,6 +60,7 @@ rest of the bar layout in `~/.config/omarchy/shell.json`.
 | `disk` | `Pie` | How space on the system disk is shown |
 | `network` | `Graph` | How network traffic is shown: `Graph`, `Rates`, `Icon` or `Off` |
 | `showPercentage` | `false` | Put the number beside graphs, gauges and pies |
+| `showPublicAddress` | `false` | Show your public address and its country's flag in the network panel |
 | `warnAt` | `90` | Memory and disk turn the warning colour when this full (%) |
 
 CPU, memory, GPU and disk each take one of these styles:
@@ -196,6 +199,14 @@ Reports from other hardware are very welcome.
   list is limited to the TCP connections of your own programs, which misses
   UDP traffic such as video calls and much of a browser's. Either way it is
   read only while the network panel is open.
+- Out of the box the plugin contacts nothing outside your machine. Turning
+  on `showPublicAddress` adds the one exception: to learn the address the
+  internet sees you at, it asks Cloudflare
+  (`https://1.1.1.1/cdn-cgi/trace`, with `curl`) when the network panel is
+  opened, at most once every ten minutes unless your connection changes.
+  The reply's country code picks the flag, which makes it easy to see
+  whether a VPN or exit node is in effect. Nothing is asked while the panel
+  is closed or the setting is off.
 - Network speed counts interfaces with a real device behind them, so VPN
   and loopback traffic is not counted twice.
 - A discrete card that is powered down is shown as asleep and left alone,

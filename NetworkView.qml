@@ -1,6 +1,7 @@
 import QtQuick
 import qs.Commons
 import qs.Ui
+import "Model.js" as Model
 
 Column {
   id: root
@@ -63,6 +64,15 @@ Column {
     }
   }
 
+  AddressRow {
+    visible: root.ctx.showPublicAddress
+    ctx: root.ctx
+    label: root.ctx.strings.t("network.public")
+    address: root.stats.publicAddress
+    prefix: Model.flagEmoji(root.stats.publicCountry)
+    placeholder: root.ctx.strings.t(root.stats.publicState === "failed" ? "network.unavailable" : "network.lookingUp")
+  }
+
   PanelSeparator { foreground: root.ctx.foreground }
 
   Column {
@@ -89,6 +99,7 @@ Column {
         id: entry
         required property var modelData
         readonly property bool down: modelData.state === "down"
+        readonly property var addresses: root.stats.netAddresses[modelData.name] || ({ v4: [], v6: [] })
 
         width: root.width
         spacing: Style.spacing.labelGap
@@ -106,6 +117,25 @@ Column {
           ctx: root.ctx
           label: root.ctx.strings.t("network.sinceBoot")
           value: root.ctx.strings.t("network.updown").arg(root.ctx.bytesText(entry.modelData.received)).arg(root.ctx.bytesText(entry.modelData.sent))
+        }
+
+        AddressRow {
+          visible: !entry.down && address !== ""
+          ctx: root.ctx
+          label: root.ctx.strings.t("network.address")
+          address: entry.addresses.v4.length > 0 ? entry.addresses.v4[0] : ""
+        }
+
+        AddressRow {
+          visible: !entry.down && address !== ""
+          ctx: root.ctx
+          label: root.ctx.strings.t("network.ipv6")
+          // One reachable from outside before one that only works at home.
+          address: {
+            var list = entry.addresses.v6
+            for (var i = 0; i < list.length; i++) if (!/^f[cd]/i.test(list[i])) return list[i]
+            return list.length > 0 ? list[0] : ""
+          }
         }
       }
     }

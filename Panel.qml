@@ -85,6 +85,9 @@ Panel {
 
   // The percentage beside a graph, gauge or pie.
   readonly property bool showPercentage: setting("showPercentage", false) === true
+  // The address the internet sees, in the network panel. Off unless asked
+  // for, because it is found by asking a server outside this machine.
+  readonly property bool showPublicAddress: setting("showPublicAddress", false) === true
   // Memory and disk turn the warning colour from this share upward.
   readonly property real warnAt: {
     var percent = Number(setting("warnAt", 90))
@@ -156,7 +159,24 @@ Panel {
   }
   onWantsNetProgramsChanged: syncNetWatch()
 
-  onStatsChanged: { watching = false; watchingNet = false; syncWatch(); syncNetWatch() }
+  // And, where it is turned on, the public address.
+  readonly property bool wantsPublicAddress: wantsNetPrograms && showPublicAddress
+  property bool watchingPublic: false
+  function syncPublicWatch() {
+    if (!stats || wantsPublicAddress === watchingPublic) return
+    stats.watchPublicAddress(wantsPublicAddress)
+    watchingPublic = wantsPublicAddress
+  }
+  onWantsPublicAddressChanged: syncPublicWatch()
+
+  function copyText(text) {
+    if (text !== "") Quickshell.execDetached(["wl-copy", "--", text])
+  }
+
+  onStatsChanged: {
+    watching = false; watchingNet = false; watchingPublic = false
+    syncWatch(); syncNetWatch(); syncPublicWatch()
+  }
   Component.onDestruction: {
     if (watching && stats) stats.watchProcesses(false)
     if (watchingNet && stats) stats.watchNetPrograms(false)

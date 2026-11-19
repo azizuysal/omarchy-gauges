@@ -311,6 +311,65 @@ function netRates(previous, current, seconds) {
   return rates
 }
 
+// The addresses each interface holds, from `ip -j addr`: the ones a person
+// would give out, so not loopback, link-local or a privacy address that has
+// been retired. Returns { "<interface>": { v4: [...], v6: [...] } }.
+function parseAddresses(text) {
+  var addresses = {}
+  var entries
+  try { entries = JSON.parse(text) } catch (error) { return addresses }
+  if (!Array.isArray(entries)) return addresses
+  for (var i = 0; i < entries.length; i++) {
+    var entry = entries[i] || {}
+    var list = Array.isArray(entry.addr_info) ? entry.addr_info : []
+    var found = { v4: [], v6: [] }
+    for (var j = 0; j < list.length; j++) {
+      var info = list[j] || {}
+      var local = looksLikeAddress(info.local)
+      if (!local || info.scope !== "global" || info.deprecated) continue
+      if (info.family === "inet") found.v4.push(local)
+      else if (info.family === "inet6") found.v6.push(local)
+    }
+    if (typeof entry.ifname === "string") addresses[entry.ifname] = found
+  }
+  return addresses
+}
+
+// An address as text, or "" if it holds anything an address would not: these
+// come from outside (a command's output, a web reply) and end up on screen
+// and in the clipboard.
+function looksLikeAddress(value) {
+  var text = typeof value === "string" ? value.trim() : ""
+  if (text.length < 2 || text.length > 45) return ""
+  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(text)) return text
+  return /^[0-9a-fA-F:.]+$/.test(text) && text.indexOf(":") !== -1 ? text : ""
+}
+
+// The address the internet sees this machine at, and the country it is
+// placed in, from the "key=value" lines of a /cdn-cgi/trace reply. The
+// country is the two-letter code, or "" where the reply gives none ("XX") or
+// an anonymising network ("T1").
+function parseTrace(text) {
+  var found = { address: "", country: "" }
+  var lines = String(text || "").split("\n")
+  for (var i = 0; i < lines.length; i++) {
+    var at = lines[i].indexOf("=")
+    if (at === -1) continue
+    var key = lines[i].slice(0, at)
+    var value = lines[i].slice(at + 1).trim()
+    if (key === "ip") found.address = looksLikeAddress(value)
+    else if (key === "loc" && /^[A-Z]{2}$/.test(value) && value !== "XX") found.country = value
+  }
+  return found
+}
+
+// The flag for a two-letter country code, as the pair of regional indicator
+// characters that fonts draw as one; "" for anything else.
+function flagEmoji(country) {
+  if (!/^[A-Z]{2}$/.test(String(country || ""))) return ""
+  return String.fromCodePoint(0x1F1E6 + country.charCodeAt(0) - 65, 0x1F1E6 + country.charCodeAt(1) - 65)
+}
+
 // Which programs the traffic belongs to, from `ss -tinpHO`: one line per TCP
 // connection with the bytes it has carried and, for connections of the
 // user's own programs, who holds it. That is all an unprivileged user can
@@ -745,6 +804,10 @@ if (typeof module !== "undefined") {
     diskRates: diskRates,
     parseNet: parseNet,
     netRates: netRates,
+    parseAddresses: parseAddresses,
+    looksLikeAddress: looksLikeAddress,
+    parseTrace: parseTrace,
+    flagEmoji: flagEmoji,
     rateCompact: rateCompact,
     parseNethogs: parseNethogs,
     parseSockets: parseSockets,

@@ -350,3 +350,38 @@ test("parseNethogs names each program and adds up its processes", () => {
     { name: "unknown UDP", down: 512, up: 1536, unknown: true }
   ])
 })
+
+test("parseAddresses keeps the addresses worth showing", () => {
+  const text = JSON.stringify([
+    { ifname: "lo", addr_info: [{ family: "inet", local: "127.0.0.1", scope: "host" }] },
+    { ifname: "wlp5s0", addr_info: [
+      { family: "inet", local: "192.168.1.42", scope: "global" },
+      { family: "inet6", local: "2001:db8::1", scope: "global" },
+      { family: "inet6", local: "2001:db8::2", scope: "global", deprecated: true },
+      { family: "inet6", local: "fe80::1", scope: "link" }
+    ] },
+    { ifname: "eth0", addr_info: [{ family: "inet", local: "<b>10.0.0.1</b>", scope: "global" }] }
+  ])
+  const addresses = Model.parseAddresses(text)
+  assert.deepEqual(addresses.lo, { v4: [], v6: [] })
+  assert.deepEqual(addresses.wlp5s0, { v4: ["192.168.1.42"], v6: ["2001:db8::1"] })
+  assert.deepEqual(addresses.eth0, { v4: [], v6: [] })
+  assert.deepEqual(Model.parseAddresses("not json"), {})
+  assert.deepEqual(Model.parseAddresses("{}"), {})
+})
+
+test("parseTrace reads the address and country and refuses anything else", () => {
+  const reply = "fl=1\nh=1.1.1.1\nip=203.0.113.7\nts=1.0\nloc=NL\nwarp=off\n"
+  assert.deepEqual(Model.parseTrace(reply), { address: "203.0.113.7", country: "NL" })
+  assert.deepEqual(Model.parseTrace("ip=2001:db8::7\nloc=XX\n"), { address: "2001:db8::7", country: "" })
+  assert.deepEqual(Model.parseTrace("ip=$(reboot)\nloc=nl\n"), { address: "", country: "" })
+  assert.deepEqual(Model.parseTrace("<html>blocked</html>"), { address: "", country: "" })
+  assert.deepEqual(Model.parseTrace(""), { address: "", country: "" })
+})
+
+test("flagEmoji turns a country code into its flag", () => {
+  assert.equal(Model.flagEmoji("US"), "\u{1F1FA}\u{1F1F8}")
+  assert.equal(Model.flagEmoji("T1"), "")
+  assert.equal(Model.flagEmoji(""), "")
+  assert.equal(Model.flagEmoji("usa"), "")
+})

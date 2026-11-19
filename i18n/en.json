@@ -52,5 +52,11 @@
   "network.quiet": "Nothing is using the network",
   "network.wifi": "Wi-Fi",
   "network.ethernet": "Ethernet",
-  "network.unidentified": "Unidentified"
+  "network.unidentified": "Unidentified",
+  "network.address": "Address",
+  "network.ipv6": "IPv6",
+  "network.public": "Public address",
+  "network.lookingUp": "Looking up…",
+  "network.unavailable": "Unavailable",
+  "network.copied": "Copied"
 }
