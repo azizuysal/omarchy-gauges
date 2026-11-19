@@ -151,3 +151,26 @@ test("Intel laptop: package temperature, card measured through its programs", ()
   assert.deepEqual(frame.sections.gpus, ["card1|0x8086|awake||||||600|1250"])
   assert.deepEqual(frame.sections.drmclients, ["@ card1", "drm-client-id:\t34", "drm-engine-render:\t500 ns"])
 })
+
+test("T2 Mac: the security chip's network link is not counted as a connection", () => {
+  const counters = " 1000 10 0 0 0 0 0 0 2000 20 0 0 0 0 0 0"
+  const { frame } = sample(machine({
+    "proc/net/dev": `Inter-|   Receive\n face |bytes\nenp4s0f1u1:${counters}\nenp5s0u2:${counters}\n wlp5s0:${counters}\n`,
+    "sys/class/net/enp4s0f1u1/operstate": "up\n",
+    "sys/class/net/enp4s0f1u1/device/uevent": "DRIVER=cdc_ncm\n",
+    "sys/class/net/enp4s0f1u1/idVendor": "05ac\n",
+    "sys/class/net/enp4s0f1u1/idProduct": "8233\n",
+    "sys/class/net/enp5s0u2/operstate": "up\n",
+    "sys/class/net/enp5s0u2/device/uevent": "DRIVER=cdc_ncm\n",
+    "sys/class/net/enp5s0u2/idVendor": "0bda\n",
+    "sys/class/net/enp5s0u2/idProduct": "8156\n",
+    "sys/class/net/wlp5s0/operstate": "up\n",
+    "sys/class/net/wlp5s0/device/uevent": "DRIVER=brcmfmac\n",
+    "sys/class/net/wlp5s0/phy80211/index": "0\n"
+  }))
+  const net = Model.parseNet(frame.sections.net)
+  assert.equal(net.enp4s0f1u1.physical, false)
+  assert.equal(net.enp5s0u2.physical, true)
+  assert.equal(net.wlp5s0.physical, true)
+  assert.deepEqual(Model.netRates(null, net, 2).interfaces.map(entry => entry.name), ["enp5s0u2", "wlp5s0"])
+})

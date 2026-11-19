@@ -9,7 +9,16 @@ Column {
   required property var ctx
   readonly property var stats: ctx.stats
   // The interfaces with a link, which is where any traffic is.
-  readonly property var connected: stats.netInterfaces.filter(function(entry) { return entry.state !== "down" })
+  readonly property var connected: stats.netInterfaces.filter(function(entry) { return root.stateOf(entry) === "up" })
+
+  // "down" with no link, "idle" with a link but no address on it (a cable
+  // into something that hands none out), otherwise "up". Until the addresses
+  // have been read, a link counts as up.
+  function stateOf(entry) {
+    if (entry.state === "down") return "down"
+    var addresses = stats.netAddresses[entry.name]
+    return addresses && addresses.v4.length === 0 && addresses.v6.length === 0 ? "idle" : "up"
+  }
 
   function kindOf(entry) {
     return ctx.strings.t(entry.wireless ? "network.wifi" : "network.ethernet")
@@ -98,7 +107,8 @@ Column {
       Column {
         id: entry
         required property var modelData
-        readonly property bool down: modelData.state === "down"
+        readonly property string state: root.stateOf(modelData)
+        readonly property bool down: state !== "up"
         readonly property var addresses: root.stats.netAddresses[modelData.name] || ({ v4: [], v6: [] })
 
         width: root.width
@@ -108,7 +118,8 @@ Column {
         StatRow {
           ctx: root.ctx
           label: root.kindOf(entry.modelData) + " · " + entry.modelData.name
-          value: entry.down ? root.ctx.strings.t("network.down")
+          value: entry.state === "down" ? root.ctx.strings.t("network.down")
+            : entry.state === "idle" ? root.ctx.strings.t("network.noAddress")
             : root.ctx.strings.t("network.updown").arg(root.ctx.rateText(entry.modelData.down)).arg(root.ctx.rateText(entry.modelData.up))
         }
 

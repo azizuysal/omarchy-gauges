@@ -403,6 +403,15 @@ while :; do
       name="${name//[[:space:]]/}"
       kind=v
       [[ -e $sys/class/net/$name/device ]] && kind=p
+      # A T2 Mac's security chip shows up as a USB network adapter whose
+      # link is always up. It is the machine talking to itself, not a way
+      # onto a network.
+      usb="$sys/class/net/$name/device/.."
+      if [[ $kind == p && -r $usb/idVendor && -r $usb/idProduct ]]; then
+        read -r usb_vendor <"$usb/idVendor" 2>/dev/null || usb_vendor=""
+        read -r usb_product <"$usb/idProduct" 2>/dev/null || usb_product=""
+        [[ $usb_vendor == 05ac && $usb_product == 8233 ]] && kind=v
+      fi
       type=wired
       [[ -d $sys/class/net/$name/wireless || -e $sys/class/net/$name/phy80211 ]] && type=wifi
       state=$(first_line "$sys/class/net/$name/operstate")

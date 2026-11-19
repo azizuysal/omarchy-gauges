@@ -44,6 +44,7 @@
   "network.interfaces": "Interfaces",
   "network.none": "No network interfaces found",
   "network.down": "Down",
+  "network.noAddress": "No address",
   "network.received": "Received",
   "network.sent": "Sent",
   "network.sinceBoot": "Since startup",
