@@ -11,6 +11,10 @@
 # that gives them back whenever nethogs is updated (an update replaces the
 # file, and the capabilities with it).
 #
+# It only adds to what is already there. Capabilities nethogs already has are
+# kept, and written down so that --remove can put them back exactly; a hook
+# file this script did not write is never overwritten or deleted.
+#
 # Know what you are granting: afterwards any user on this machine can run
 # nethogs and see which programs are talking on the network.
 #
@@ -19,21 +23,83 @@
 
 set -euo pipefail
 
-readonly capabilities="cap_net_admin,cap_net_raw,cap_dac_read_search,cap_sys_ptrace+pe"
+readonly names="cap_net_admin,cap_net_raw,cap_dac_read_search,cap_sys_ptrace"
 readonly hook=/etc/pacman.d/hooks/gauges-nethogs-capabilities.hook
+readonly marker="# Installed by the Omarchy Gauges plugin's nethogs-setup."
+readonly state=/var/lib/gauges/nethogs-capabilities.before
 
 if [[ $EUID -ne 0 ]]; then
   echo "This changes system files, so it needs root: sudo $0 $*" >&2
   exit 1
 fi
 
+# The capabilities a file has now, as text setcap accepts; empty for none.
+current_capabilities() {
+  local text
+  text=$(getcap "$1")
+  text=${text#"$1"}
+  text=${text# }
+  text=${text#= }
+  printf '%s' "$text"
+}
+
+hook_is_ours() {
+  [[ -f $hook ]] && grep -qxF "$marker" "$hook"
+}
+
 if [[ ${1:-} == --remove ]]; then
-  rm -f "$hook"
+  # Undo only what this script can show it did: a record of the capabilities
+  # from before, or a hook it wrote. With neither, nothing here is ours.
+  if [[ ! -f $state ]] && ! hook_is_ours; then
+    echo "Nothing to undo: nethogs-setup has not been run on this machine."
+    exit 0
+  fi
+
+  legacy=false
+  [[ -f $state ]] || legacy=true
+
+  if hook_is_ours; then
+    rm -f "$hook"
+    echo "Removed the pacman hook."
+  elif [[ -e $hook ]]; then
+    echo "Left $hook alone: this script did not write it."
+  fi
+
   binary=$(command -v nethogs || true)
-  [[ -n $binary ]] && setcap -r "$binary" 2>/dev/null || true
-  echo "Removed the hook and nethogs' capabilities. nethogs itself is still installed;"
-  echo "remove it with: pacman -Rns nethogs"
+  if [[ -n $binary ]]; then
+    if [[ $legacy == false ]]; then
+      # Put back exactly what nethogs had before setup.
+      previous=$(<"$state")
+      if [[ -n $previous ]]; then
+        setcap "$previous" "$binary"
+      else
+        setcap -r "$binary" 2>/dev/null || true
+      fi
+    else
+      # No record of what was there before (set up by Gauges 1.0.0): take away
+      # only the capabilities setup grants, and keep anything else.
+      now=$(current_capabilities "$binary")
+      if [[ -n $now ]]; then
+        setcap "$now $names-pe" "$binary"
+        left=$(current_capabilities "$binary")
+        [[ -z $left || $left == "=" ]] && setcap -r "$binary"
+      fi
+    fi
+    left=$(current_capabilities "$binary")
+    echo "nethogs' capabilities are now: ${left:-none}"
+  fi
+
+  rm -f "$state"
+  rmdir "${state%/*}" 2>/dev/null || true
+  echo "nethogs itself is still installed; remove it with: pacman -Rns nethogs"
   exit 0
+fi
+
+# Check before changing anything, so a refusal leaves the system untouched.
+if [[ -e $hook ]] && ! hook_is_ours; then
+  echo "$hook already exists and was not written by this script." >&2
+  echo "Move it out of the way, or merge it by hand, then run this again." >&2
+  exit 1
 fi
 
 if ! command -v nethogs >/dev/null 2>&1; then
@@ -46,12 +112,29 @@ if ! command -v nethogs >/dev/null 2>&1; then
 fi
 
 binary=$(command -v nethogs)
+
+if [[ -f $state ]]; then
+  # Run before: build on what nethogs had originally, not on our own grant.
+  previous=$(<"$state")
+else
+  previous=$(current_capabilities "$binary")
+  # A hook of ours without a record means Gauges 1.0.0 set this up, and what
+  # was there before it is unknown. Record nothing; --remove then takes away
+  # only what setup grants.
+  if ! hook_is_ours; then
+    install -d -m 755 "${state%/*}"
+    printf '%s\n' "$previous" >"$state"
+  fi
+fi
+
+# Later clauses add to earlier ones, so this keeps what was there.
+capabilities="${previous:+$previous }$names+pe"
 setcap "$capabilities" "$binary"
 
 if command -v pacman >/dev/null 2>&1; then
   install -d /etc/pacman.d/hooks
   cat >"$hook" <<EOF
-# Installed by the Omarchy Gauges plugin's nethogs-setup.
+$marker
 # An update replaces nethogs and drops its capabilities; this puts them back.
 [Trigger]
 Operation = Install
@@ -62,7 +145,7 @@ Target = nethogs
 [Action]
 Description = Restoring nethogs' capture capabilities for Gauges...
 When = PostTransaction
-Exec = /usr/bin/setcap $capabilities $binary
+Exec = /usr/bin/setcap "$capabilities" $binary
 EOF
 fi
 

@@ -114,7 +114,16 @@ packets without root, and adds a pacman hook
 whenever `nethogs` is updated, since an update would otherwise drop them.
 
 Afterwards any user on the machine can run `nethogs` and see which programs
-are talking on the network. Undo it with `nethogs-setup --remove`.
+are talking on the network.
+
+It only adds to what is already there. Capabilities `nethogs` already had are
+kept and written down in `/var/lib/gauges/nethogs-capabilities.before`, and a
+hook file of that name which the script did not write is left alone (setup
+stops instead of overwriting it).
+
+Undo it with `sudo nethogs-setup --remove`. That puts the capabilities back
+exactly as they were before setup and deletes the hook only if the script
+wrote it. On a machine that never ran setup it changes nothing.
 
 ## What the bar shows
 
