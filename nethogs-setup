@@ -153,7 +153,20 @@ else
   # Capabilities this script did not set, or cannot show it set.
   echo "nethogs already has capabilities that this script did not set:" >&2
   echo "  $(getcap -- "$binary" 2>&1)" >&2
-  echo "They are left as they are, and nothing was changed." >&2
+  echo "They are left as they are." >&2
+  # A hook of this script's with no record beside it was written by Gauges
+  # 1.0.0, and grants the capabilities after every nethogs update no matter
+  # what has been done to them since. It goes, so that nothing of this
+  # script's acts on capabilities it cannot show are its own.
+  if [[ ! -f $record ]]; then
+    for file in "$hook" "$check_hook"; do
+      if is_ours "$file"; then
+        rm "$file"
+        echo "Removed $file, left by an earlier version of this script:" >&2
+        echo "it would have granted them again after every nethogs update." >&2
+      fi
+    done
+  fi
   if [[ $state == ours ]]; then
     echo "They are the ones the panel needs, so it already works. To have this" >&2
     echo "script look after them (and restore them after updates), clear them" >&2

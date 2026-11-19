@@ -140,8 +140,11 @@ yourself. It then deletes its hooks and its note. If clearing fails it stops
 with an error and keeps both, so it can be run again. On a machine that
 never ran setup it changes nothing.
 
-If you ran setup with Gauges 1.0.0, there is no such note, so the script
-will not touch the capabilities it set back then. To hand them over to it:
+If you ran setup with Gauges 1.0.0, run it once more after updating. That
+version's hook granted the capabilities again after every `nethogs` update
+regardless of what had been done to them since, and left no note. The new
+script will not touch capabilities it has no note for, but it does remove
+that old hook. To hand the capabilities over to it afterwards:
 `sudo setcap -r "$(realpath "$(command -v nethogs)")"`, then run setup again.
 
 ## What the bar shows
