@@ -23,8 +23,8 @@ Item {
     ctx: root.ctx
     label: root.label
     value: root.copied ? root.ctx.strings.t("network.copied")
-      : root.address === "" ? root.placeholder
-      : root.prefix !== "" ? root.prefix + "  " + root.address : root.address
+      : root.address === "" ? root.placeholder : root.address
+    prefix: root.copied || root.address === "" ? "" : root.prefix
     opacity: area.containsMouse && root.address !== "" ? 0.7 : 1
   }
 
