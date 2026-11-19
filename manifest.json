@@ -28,6 +28,7 @@
       "disk": "Pie",
       "network": "Graph",
       "showPercentage": false,
+      "showIPv6": false,
       "showPublicAddress": false,
       "warnAt": 90
     },
@@ -114,6 +115,13 @@
         "type": "boolean",
         "label": "Show the number beside graphs, gauges and pies",
         "defaultValue": false
+      },
+      {
+        "key": "showIPv6",
+        "type": "boolean",
+        "label": "Show IPv6 addresses",
+        "defaultValue": false,
+        "description": "Lists each connection's IPv6 address under its IPv4 one in the network panel."
       },
       {
         "key": "showPublicAddress",

@@ -20,7 +20,7 @@ Each reading can be drawn as a graph, a gauge, a pie, a number or an icon:
   temperature.
 - **Network**: download and upload speed, history, the programs using the
   network most, and each interface's speed, traffic since startup and
-  addresses. Optionally the address the internet sees you at, with its
+  address (IPv6 too, if you turn it on). Optionally the address the internet sees you at, with its
   country's flag. Click an address to copy it.
 
 Requires Omarchy 4.5 or later.
@@ -60,6 +60,7 @@ rest of the bar layout in `~/.config/omarchy/shell.json`.
 | `disk` | `Pie` | How space on the system disk is shown |
 | `network` | `Graph` | How network traffic is shown: `Graph`, `Rates`, `Icon` or `Off` |
 | `showPercentage` | `false` | Put the number beside graphs, gauges and pies |
+| `showIPv6` | `false` | List each connection's IPv6 address under its IPv4 one in the network panel |
 | `showPublicAddress` | `false` | Show your public address and its country's flag in the network panel |
 | `warnAt` | `90` | Memory and disk turn the warning colour when this full (%) |
 

@@ -127,7 +127,7 @@ Column {
         }
 
         AddressRow {
-          visible: !entry.down && address !== ""
+          visible: root.ctx.showIPv6 && !entry.down && address !== ""
           ctx: root.ctx
           label: root.ctx.strings.t("network.ipv6")
           // One reachable from outside before one that only works at home.

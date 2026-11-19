@@ -88,6 +88,8 @@ Panel {
   // The address the internet sees, in the network panel. Off unless asked
   // for, because it is found by asking a server outside this machine.
   readonly property bool showPublicAddress: setting("showPublicAddress", false) === true
+  // Each connection's IPv6 address beside its IPv4 one.
+  readonly property bool showIPv6: setting("showIPv6", false) === true
   // Memory and disk turn the warning colour from this share upward.
   readonly property real warnAt: {
     var percent = Number(setting("warnAt", 90))
