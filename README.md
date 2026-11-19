@@ -116,14 +116,21 @@ whenever `nethogs` is updated, since an update would otherwise drop them.
 Afterwards any user on the machine can run `nethogs` and see which programs
 are talking on the network.
 
-It only adds to what is already there. Capabilities `nethogs` already had are
-kept and written down in `/var/lib/gauges/nethogs-capabilities.before`, and a
-hook file of that name which the script did not write is left alone (setup
-stops instead of overwriting it).
+It manages only the capabilities it added itself. Any of the four that
+`nethogs` already had, and any other capability, are never set, restored or
+removed by it. Which ones it added is written down in
+`/var/lib/gauges/nethogs-capabilities.added`; the hook grants those again
+after a `nethogs` update, on top of whatever `nethogs` has by then. A hook
+file of that name which the script did not write is left alone (setup stops
+instead of overwriting it).
 
-Undo it with `sudo nethogs-setup --remove`. That puts the capabilities back
-exactly as they were before setup and deletes the hook only if the script
-wrote it. On a machine that never ran setup it changes nothing.
+Undo it with `sudo nethogs-setup --remove`. That takes away the capabilities
+the script added, then deletes its hook and its record. If taking them away
+fails it stops with an error and keeps both, so it can be run again. On a
+machine that never ran setup it changes nothing.
+
+Because the hook grants the recorded capabilities again after every update,
+use `--remove` to take them away for good, not `setcap` by hand.
 
 ## What the bar shows
 
