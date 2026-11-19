@@ -105,51 +105,35 @@ o.bind("SUPER CTRL, M", "System monitor", "omarchy-shell gauges toggle")
 
 ## Naming every program on the network (optional)
 
-Seeing which program is behind each byte of traffic means watching packets,
-which Linux does not let an ordinary user do. One command sets that up:
+Out of the box the network panel lists the TCP connections of your own
+programs. To have it name every program, and count UDP too, install
+[nethogs](https://github.com/raboof/nethogs):
+
+```bash
+sudo pacman -S nethogs
+```
+
+That is all the setup there is. Arch's package gives `nethogs` the
+capabilities to capture packets without root, and gives them again on every
+update. Know what that grants: afterwards any user on the machine can run
+`nethogs` and see which programs are talking on the network. Remove it with
+`sudo pacman -Rns nethogs`; the panel goes back to the shorter list.
+
+The plugin's `nethogs-setup` script does the same install. It no longer
+changes capabilities or adds pacman hooks.
+
+**If you ran `nethogs-setup` from Gauges 1.0.0** (or any version before
+1.1.0), run the new one once:
 
 ```bash
 sudo ~/.config/omarchy/plugins/azizuysal.gauges/nethogs-setup
 ```
 
-It installs `nethogs` if it is missing, gives it the capabilities to capture
-packets without root, and adds two pacman hooks
-(`/etc/pacman.d/hooks/gauges-nethogs-capabilities.hook` and
-`gauges-nethogs-capabilities-check.hook`) that restore them whenever
-`nethogs` is updated, since an update would otherwise drop them.
-
-Afterwards any user on the machine can run `nethogs` and see which programs
-are talking on the network.
-
-The script follows an all-or-nothing rule, so it never mixes its settings
-with an administrator's:
-
-- It gives `nethogs` capabilities only when `nethogs` has none, and then
-  exactly the four it needs. If `nethogs` already has any, it stops, changes
-  nothing and tells you what the panel needs.
-- It notes that it did so in `/var/lib/gauges/nethogs-capabilities.set`,
-  written before the capabilities are granted.
-- After a `nethogs` update, its hook grants them again only if that note is
-  still there and the new file has no capabilities. A second hook runs
-  before the update and drops the note if the capabilities are no longer
-  exactly the ones the script granted, so a change you made by hand is never
-  undone by an update.
-- Hook files of those names that the script did not write are left alone
-  (setup stops instead of overwriting them).
-
-Undo it with `sudo nethogs-setup --remove`. It clears the capabilities only
-if they are exactly the set the script granted and its note is there;
-otherwise it leaves them alone and prints the command to clear them
-yourself. It then deletes its hooks and its note. If clearing fails it stops
-with an error and keeps both, so it can be run again. On a machine that
-never ran setup it changes nothing.
-
-If you ran setup with Gauges 1.0.0, run it once more after updating. That
-version's hook granted the capabilities again after every `nethogs` update
-regardless of what had been done to them since, and left no note. The new
-script will not touch capabilities it has no note for, but it does remove
-that old hook. To hand the capabilities over to it afterwards:
-`sudo setcap -r "$(realpath "$(command -v nethogs)")"`, then run setup again.
+Those versions added a pacman hook, and later a note in `/var/lib/gauges`,
+which turned out to duplicate what the package already does. The new script
+removes them (only files it wrote itself) and leaves `nethogs` and its
+capabilities as they are. `nethogs-setup --remove` does the same clean-up
+without installing anything.
 
 ## What the bar shows
 
@@ -195,8 +179,8 @@ Reports from other hardware are very welcome.
   `/proc/<pid>/fdinfo`. Only your own programs are visible, so graphics work
   done by another user's processes is not counted.
 - The network panel's list of programs comes from
-  [nethogs](https://github.com/raboof/nethogs) once you have run the setup
-  below, and then covers every program and both TCP and UDP. Without it the
+  [nethogs](https://github.com/raboof/nethogs) once it is installed (see
+  above), and then covers every program and both TCP and UDP. Without it the
   list is limited to the TCP connections of your own programs, which misses
   UDP traffic such as video calls and much of a browser's. Either way it is
   read only while the network panel is open.

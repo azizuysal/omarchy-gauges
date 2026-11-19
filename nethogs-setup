@@ -2,220 +2,92 @@
 
 # Lets the network panel name every program using the network.
 #
-# Usage: sudo ./nethogs-setup            set up
-#        sudo ./nethogs-setup --remove   undo
+# Usage: sudo ./nethogs-setup            install nethogs
+#        sudo ./nethogs-setup --remove   clean up after older versions
 #
 # The panel's list of programs comes from nethogs, which has to capture
-# packets to see who is sending what. This installs nethogs if it is missing,
-# gives it the capabilities to do that without root, and adds a pacman hook
-# that gives them back whenever nethogs is updated (an update replaces the
-# file, and the capabilities with it).
+# packets to see who is sending what. Arch's nethogs package gives the
+# program the capabilities to do that without root, and gives them again on
+# every update, so installing the package is all the setup there is. This
+# installs it if it is missing, which is the same as:
 #
-# The rule it follows is all or nothing. It gives nethogs capabilities only
-# when nethogs has none, and then exactly the set below. It takes them away
-# only when nethogs has exactly that set and its own record says it put them
-# there. In every other case (nethogs has capabilities from somewhere else,
-# or they have been changed since) it changes nothing and says so: those are
-# an administrator's, and merging with them is not this script's business.
-# The same goes for a hook file it did not write.
+#   sudo pacman -S nethogs
 #
-# Know what you are granting: afterwards any user on this machine can run
-# nethogs and see which programs are talking on the network.
+# Know what that grants: any user on this machine can then run nethogs and
+# see which programs are talking on the network.
 #
-# Without this the plugin still works; the list is then limited to the TCP
-# connections of your own programs.
+# This script does not change capabilities. Earlier versions of it did, and
+# added pacman hooks and a note of their own; both ways of running it remove
+# those leftovers, and nothing else. A hook file it did not write is never
+# touched.
+#
+# Without nethogs the plugin still works; the list is then limited to the
+# TCP connections of your own programs.
 
 set -euo pipefail
 
+# What nethogs needs, and what Arch's package gives it.
 readonly capabilities="cap_net_admin,cap_net_raw,cap_dac_read_search,cap_sys_ptrace=ep"
-readonly hook=/etc/pacman.d/hooks/gauges-nethogs-capabilities.hook
-# A second hook, run before an update: see where the hooks are written.
-readonly check_hook=/etc/pacman.d/hooks/gauges-nethogs-capabilities-check.hook
 readonly marker="# Installed by the Omarchy Gauges plugin's nethogs-setup."
-# Exists exactly while nethogs' capabilities are this script's doing. Written
-# before they are granted and removed after they are cleared, so it can say
-# "ours" when nothing was granted but never the reverse.
-readonly record=/var/lib/gauges/nethogs-capabilities.set
+# Everything an earlier version of this script could have left behind.
+readonly old_hooks=(
+  /etc/pacman.d/hooks/gauges-nethogs-capabilities.hook
+  /etc/pacman.d/hooks/gauges-nethogs-capabilities-check.hook
+)
+readonly old_notes=/var/lib/gauges
 
 if [[ $EUID -ne 0 ]]; then
   echo "This changes system files, so it needs root: sudo $0 $*" >&2
   exit 1
 fi
 
-is_ours() {
-  [[ -f $1 ]] && grep -qxF "$marker" "$1"
-}
-
-hook_is_ours() {
-  is_ours "$hook" || is_ours "$check_hook"
-}
-
-# Sets `binary` to nethogs itself, not a link to it, or to nothing.
-binary=""
-find_nethogs() {
-  binary=$(command -v nethogs || true)
-  [[ -n $binary ]] && binary=$(realpath -e -- "$binary" 2>/dev/null || true)
-  [[ -n $binary && -f $binary ]] || binary=""
-}
-
-# What nethogs' capabilities are: "none", "ours" (exactly the set above) or
-# "other". Anything that cannot be read for certain counts as "other", which
-# is the answer that makes this script keep its hands off.
-capability_state() {
-  if setcap -q -v "$capabilities" "$binary" >/dev/null 2>&1; then
-    echo ours
-  elif setcap -q -v = "$binary" >/dev/null 2>&1 && [[ -z $(getcap -- "$binary" 2>&1) ]]; then
-    echo none
-  else
-    echo other
-  fi
-}
-
-if [[ ${1:-} == --remove ]]; then
-  if [[ ! -f $record ]] && ! hook_is_ours; then
-    echo "Nothing to undo: nethogs-setup has not been run on this machine."
-    exit 0
-  fi
-
-  # Capabilities first. A failure stops here, with the hook and the record
-  # still in place, so this can be run again.
-  find_nethogs
-  if [[ -n $binary ]]; then
-    state=$(capability_state)
-    if [[ -f $record && $state == ours ]]; then
-      setcap -r "$binary"
-      if [[ $(capability_state) != none ]]; then
-        echo "nethogs still has capabilities after clearing them: $(getcap -- "$binary" 2>&1)" >&2
-        echo "Nothing else was removed. Look into that, then run this again." >&2
-        exit 1
-      fi
-      echo "Cleared nethogs' capabilities."
-    elif [[ $state != none ]]; then
-      # Either this script has no record of setting them (it was set up by
-      # Gauges 1.0.0, or by hand), or they are no longer what it set.
-      echo "Left nethogs' capabilities alone: $(getcap -- "$binary" 2>&1)"
-      echo "This script cannot show they are all its own. To clear them: setcap -r $binary"
-    fi
-  fi
-
-  for file in "$hook" "$check_hook"; do
-    if is_ours "$file"; then
+# Removes the hooks earlier versions wrote (told apart by their first line)
+# and their notes. The capabilities themselves are the package's, and stay.
+clean_up() {
+  local file
+  for file in "${old_hooks[@]}"; do
+    if [[ -f $file ]] && grep -qxF "$marker" "$file"; then
       rm "$file"
-      echo "Removed $file"
+      echo "Removed $file, left by an earlier version of this script."
     elif [[ -e $file ]]; then
       echo "Left $file alone: this script did not write it."
     fi
   done
+  rm -f "$old_notes"/nethogs-capabilities.{set,added,before}
+  rmdir "$old_notes" 2>/dev/null || true
+}
 
-  # The records of earlier versions of this script go too.
-  rm -f "$record" "${record%.set}.added" "${record%.set}.before"
-  rmdir "${record%/*}" 2>/dev/null || true
+if [[ ${1:-} == --remove ]]; then
+  clean_up
+  echo "Nothing else of this script's is on the system."
   echo "nethogs itself is still installed; remove it with: pacman -Rns nethogs"
   exit 0
 fi
 
-# Check before changing anything, so a refusal leaves the system untouched.
-for file in "$hook" "$check_hook"; do
-  if [[ -e $file ]] && ! is_ours "$file"; then
-    echo "$file already exists and was not written by this script." >&2
-    echo "Move it out of the way, or merge it by hand, then run this again." >&2
-    exit 1
-  fi
-done
+clean_up
 
 if ! command -v nethogs >/dev/null 2>&1; then
   if command -v pacman >/dev/null 2>&1; then
     pacman -S --needed --noconfirm nethogs
   else
     echo "nethogs is not installed, and there is no pacman to install it with." >&2
+    echo "Install it with your system's package manager." >&2
     exit 1
   fi
 fi
 
-find_nethogs
-if [[ -z $binary ]]; then
-  echo "Could not find the nethogs program file." >&2
-  exit 1
-fi
-
-state=$(capability_state)
-if [[ $state == none ]]; then
-  install -d -m 755 "${record%/*}"
-  printf '%s\n' "$capabilities" >"$record"
-  setcap "$capabilities" "$binary"
-  if [[ $(capability_state) != ours ]]; then
-    echo "Granting the capabilities did not take: $(getcap -- "$binary" 2>&1)" >&2
-    exit 1
-  fi
-elif [[ $state == ours && -f $record ]]; then
-  : # Set up already; only the hook below is refreshed.
+binary=$(realpath -e -- "$(command -v nethogs)")
+if setcap -q -v "$capabilities" "$binary" >/dev/null 2>&1; then
+  echo "Done: $(getcap -- "$binary")"
+  echo "Open the network panel again to see every program."
 else
-  # Capabilities this script did not set, or cannot show it set.
-  echo "nethogs already has capabilities that this script did not set:" >&2
-  echo "  $(getcap -- "$binary" 2>&1)" >&2
-  echo "They are left as they are." >&2
-  # A hook of this script's with no record beside it was written by Gauges
-  # 1.0.0, and grants the capabilities after every nethogs update no matter
-  # what has been done to them since. It goes, so that nothing of this
-  # script's acts on capabilities it cannot show are its own.
-  if [[ ! -f $record ]]; then
-    for file in "$hook" "$check_hook"; do
-      if is_ours "$file"; then
-        rm "$file"
-        echo "Removed $file, left by an earlier version of this script:" >&2
-        echo "it would have granted them again after every nethogs update." >&2
-      fi
-    done
-  fi
-  if [[ $state == ours ]]; then
-    echo "They are the ones the panel needs, so it already works. To have this" >&2
-    echo "script look after them (and restore them after updates), clear them" >&2
-    echo "with 'setcap -r $binary' and run this again." >&2
-  else
-    echo "The panel needs: $capabilities" >&2
-    echo "Add those yourself, or clear the existing ones and run this again." >&2
-  fi
+  # Not Arch's package, or someone has changed them. Theirs to decide.
+  echo "nethogs is installed, but does not have the capabilities the panel needs." >&2
+  has=$(getcap -- "$binary" 2>&1 | sed "s|^$binary ||")
+  echo "  it has:   ${has:-none}" >&2
+  echo "  it needs: $capabilities" >&2
+  echo "This script leaves them as they are. To grant them yourself:" >&2
+  echo "  setcap $capabilities $binary" >&2
+  echo "Until then the panel lists only your own programs' TCP connections." >&2
   exit 1
 fi
-
-if command -v pacman >/dev/null 2>&1; then
-  install -d /etc/pacman.d/hooks
-  # Two hooks keep the rule across updates. Before nethogs is replaced, the
-  # first drops the record if the capabilities are no longer exactly the set
-  # this script granted: someone has changed them, so they are no longer this
-  # script's to put back. After, the second grants the set again only while
-  # the record stands and the new file has no capabilities at all.
-  cat >"$check_hook" <<EOF
-$marker
-# Before nethogs is updated: if its capabilities are no longer the ones
-# nethogs-setup granted, forget that it granted any, so they are not put back.
-[Trigger]
-Operation = Upgrade
-Operation = Remove
-Type = Package
-Target = nethogs
-
-[Action]
-Description = Checking nethogs' capabilities for Gauges...
-When = PreTransaction
-Exec = /bin/sh -c '[ -f $record ] && ! /usr/bin/setcap -q -v $capabilities $binary >/dev/null 2>&1 && rm -f $record; exit 0'
-EOF
-  cat >"$hook" <<EOF
-$marker
-# An update replaces nethogs and drops its capabilities; this puts them back,
-# if nethogs-setup's record is still there and the new file has none.
-[Trigger]
-Operation = Install
-Operation = Upgrade
-Type = Package
-Target = nethogs
-
-[Action]
-Description = Restoring nethogs' capture capabilities for Gauges...
-When = PostTransaction
-Exec = /bin/sh -c '[ -f $record ] && /usr/bin/setcap -q -v = $binary >/dev/null 2>&1 && [ -z "\$(/usr/bin/getcap $binary 2>&1)" ] && exec /usr/bin/setcap $capabilities $binary; exit 0'
-EOF
-fi
-
-echo "Done: $(getcap -- "$binary")"
-echo "Open the network panel again to see every program."
