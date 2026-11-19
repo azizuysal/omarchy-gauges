@@ -12,7 +12,7 @@ Each reading can be drawn as a graph, a gauge, a pie, a number or an icon:
 
 - **CPU**: load, two minutes of history, per-core bars, temperature, load
   average, uptime, and the programs using the most processor.
-- **Memory**: used and cached memory, history, swap, and the programs holding
+- **Memory**: used and cached memory, swap, and the programs holding
   the most memory.
 - **GPU**: load for each card, with video memory, temperature and power
   where the card reports them.

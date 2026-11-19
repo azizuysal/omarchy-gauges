@@ -28,12 +28,6 @@ Column {
     fillColor: root.ctx.levelColor(root.memory.fraction, 0.9)
   }
 
-  Sparkline {
-    ctx: root.ctx
-    values: root.stats.memoryHistory
-    capacity: root.stats.historyLength
-  }
-
   Row {
     width: parent.width
     spacing: Style.space(20)
