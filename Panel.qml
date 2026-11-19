@@ -161,6 +161,25 @@ Panel {
   }
   onWantsNetProgramsChanged: syncNetWatch()
 
+  // And who is using the disk and the graphics cards.
+  readonly property bool wantsDiskProcesses: opened && active === "disk"
+  property bool watchingDisk: false
+  function syncDiskWatch() {
+    if (!stats || wantsDiskProcesses === watchingDisk) return
+    stats.watchDiskProcesses(wantsDiskProcesses)
+    watchingDisk = wantsDiskProcesses
+  }
+  onWantsDiskProcessesChanged: syncDiskWatch()
+
+  readonly property bool wantsGpuProcesses: opened && active === "gpu"
+  property bool watchingGpu: false
+  function syncGpuWatch() {
+    if (!stats || wantsGpuProcesses === watchingGpu) return
+    stats.watchGpuProcesses(wantsGpuProcesses)
+    watchingGpu = wantsGpuProcesses
+  }
+  onWantsGpuProcessesChanged: syncGpuWatch()
+
   // And, where it is turned on, the public address.
   readonly property bool wantsPublicAddress: wantsNetPrograms && showPublicAddress
   property bool watchingPublic: false
@@ -177,7 +196,8 @@ Panel {
 
   onStatsChanged: {
     watching = false; watchingNet = false; watchingPublic = false
-    syncWatch(); syncNetWatch(); syncPublicWatch()
+    watchingDisk = false; watchingGpu = false
+    syncWatch(); syncNetWatch(); syncPublicWatch(); syncDiskWatch(); syncGpuWatch()
   }
   Component.onDestruction: {
     if (watching && stats) stats.watchProcesses(false)

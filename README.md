@@ -15,9 +15,9 @@ Each reading can be drawn as a graph, a gauge, a pie, a number or an icon:
 - **Memory**: used and cached memory, swap, and the programs holding
   the most memory.
 - **GPU**: load for each card, with video memory, temperature and power
-  where the card reports them.
-- **Disk**: space on each volume, read and write activity, and drive
-  temperature.
+  where the card reports them, and the processes using the graphics most.
+- **Disk**: space on each volume, read and write activity, drive
+  temperature, and the processes reading and writing most.
 - **Network**: download and upload speed, history, the programs using the
   network most, and each interface's speed, traffic since startup and
   address (IPv6 too, if you turn it on). Optionally the address the internet sees you at, with its
@@ -208,6 +208,10 @@ Reports from other hardware are very welcome.
   The reply's country code picks the flag, which makes it easy to see
   whether a VPN or exit node is in effect. Nothing is asked while the panel
   is closed or the setting is off.
+- The disk and GPU panels' lists of processes cover your own programs: the
+  kernel shows an ordinary user neither what another user's process reads
+  and writes nor how it uses the graphics. They are read only while the
+  panel is open. On NVIDIA the list comes from `nvidia-smi pmon`.
 - Network speed counts interfaces with a real device behind them, so VPN
   and loopback traffic is not counted twice.
 - A discrete card that is powered down is shown as asleep and left alone,

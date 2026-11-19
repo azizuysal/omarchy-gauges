@@ -108,4 +108,15 @@ Column {
       }
     }
   }
+
+  PanelSeparator { foreground: root.ctx.foreground }
+
+  ProcessList {
+    ctx: root.ctx
+    title: root.ctx.strings.t("disk.top")
+    rows: root.stats.diskProcesses
+    kind: "disk"
+    ready: root.stats.diskProcessesReady
+    quiet: root.ctx.strings.t("disk.quiet")
+  }
 }

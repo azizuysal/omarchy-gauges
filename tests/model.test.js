@@ -385,3 +385,39 @@ test("flagEmoji turns a country code into its flag", () => {
   assert.equal(Model.flagEmoji(""), "")
   assert.equal(Model.flagEmoji("usa"), "")
 })
+
+test("diskIoRates adds a program's processes together and ranks by traffic", () => {
+  const before = Model.parseDiskIo("10 1000 0 browser\n11 0 0 browser\n12 500 500 idle\n13 0 0 old\n")
+  const after = Model.parseDiskIo("10 3000 2000 browser\n11 0 4000 browser\n12 500 500 idle\n13 9000 0 new\n14 100 100 fresh\n")
+  assert.deepEqual(Model.diskIoRates(before, after, 2, 5), [{ name: "browser", read: 1000, write: 3000, count: 2 }])
+  assert.deepEqual(Model.diskIoRates(null, after, 2, 5), [])
+  assert.deepEqual(Model.parseDiskIo("garbage\n12 x 3 name\n"), {})
+})
+
+test("drmProcesses says which programs keep a card busy", () => {
+  const reading = (render, video, other) => Model.parseDrmClients([
+    "@ card1",
+    "drm-client-id:\t1", `drm-engine-render:\t${render} ns`, `drm-engine-video:\t${video} ns`, "gauges-pid: 100", "gauges-name: player",
+    "@ card1",
+    "drm-client-id:\t2", `drm-engine-render:\t${other} ns`, "gauges-pid: 200", "gauges-name: compositor",
+    "@ card1",
+    "drm-client-id:\t3", "drm-engine-render:\t0 ns", "gauges-pid: 300", "gauges-name: idle"
+  ])
+  const list = Model.drmProcesses(reading(0, 0, 0), reading(200e6, 1000e6, 100e6), 2, 5)
+  assert.deepEqual(list, [
+    { name: "player", load: 0.5, count: 1 },
+    { name: "compositor", load: 0.05, count: 1 }
+  ])
+  assert.deepEqual(Model.drmProcesses(null, reading(1, 1, 1), 2, 5), [])
+  const withNvidia = Model.drmProcesses(reading(0, 0, 0), reading(0, 0, 0), 2, 5, [{ pid: 7, name: "game", load: 0.8 }])
+  assert.deepEqual(withNvidia, [{ name: "game", load: 0.8, count: 1 }])
+})
+
+test("parseNvidiaPmon reads each process's share", () => {
+  const text = "# gpu         pid   type     sm    mem    enc    dec    jpg    ofa    command \n"
+    + "# Idx           #    C/G      %      %      %      %      %      %    name \n"
+    + "    0       1234     G     35      4      -      -      -      -    game           \n"
+    + "    0       5678     C      -      -      -      -      -      -    idle           \n"
+  assert.deepEqual(Model.parseNvidiaPmon(text), [{ pid: 1234, name: "game", load: 0.35 }])
+  assert.deepEqual(Model.parseNvidiaPmon(""), [])
+})

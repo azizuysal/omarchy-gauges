@@ -121,4 +121,19 @@ Column {
       }
     }
   }
+
+  PanelSeparator {
+    visible: root.stats.gpus.length > 0
+    foreground: root.ctx.foreground
+  }
+
+  ProcessList {
+    visible: root.stats.gpus.length > 0
+    ctx: root.ctx
+    title: root.ctx.strings.t("gpu.top")
+    rows: root.stats.gpuProcesses
+    kind: "gpu"
+    ready: root.stats.gpuProcessesReady
+    quiet: root.ctx.strings.t("gpu.quiet")
+  }
 }

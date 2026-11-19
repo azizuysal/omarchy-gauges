@@ -148,6 +148,48 @@ Item {
 
   // How many open panels want the process list. Counted rather than a flag
   // because the same panel can be open on more than one monitor's bar.
+  // ---- who is using the disk and the graphics cards
+  // Like the lists above, read only while a panel showing them is open.
+  // Rows are { name, count, read, write } and { name, count, load }.
+  property var diskProcesses: []
+  property bool diskProcessesReady: false
+  property int diskProcessWatchers: 0
+  property var _previousDiskIo: null
+  property double _previousDiskIoAt: 0
+  function watchDiskProcesses(on) {
+    diskProcessWatchers = Math.max(0, diskProcessWatchers + (on ? 1 : -1))
+  }
+  onDiskProcessWatchersChanged: {
+    if (diskProcessWatchers > 0) {
+      if (!diskIoProc.running) diskIoProc.running = true
+    } else {
+      _previousDiskIo = null
+      diskProcesses = []
+      diskProcessesReady = false
+    }
+  }
+
+  property var gpuProcesses: []
+  property bool gpuProcessesReady: false
+  property int gpuProcessWatchers: 0
+  property var _previousGpuClients: null
+  property double _previousGpuClientsAt: 0
+  property var _nvidiaProcesses: []
+  property bool _hasNvidia: false
+  function watchGpuProcesses(on) {
+    gpuProcessWatchers = Math.max(0, gpuProcessWatchers + (on ? 1 : -1))
+  }
+  onGpuProcessWatchersChanged: {
+    if (gpuProcessWatchers > 0) {
+      if (!gpuClientProc.running) gpuClientProc.running = true
+    } else {
+      _previousGpuClients = null
+      _nvidiaProcesses = []
+      gpuProcesses = []
+      gpuProcessesReady = false
+    }
+  }
+
   property int processWatchers: 0
   function watchProcesses(on) {
     processWatchers = Math.max(0, processWatchers + (on ? 1 : -1))
@@ -226,6 +268,7 @@ Item {
     }
     _previousDisks = disks
 
+    _hasNvidia = sections.nvidia !== undefined
     var net = Model.parseNet(sections.net || [])
     var netRates = Model.netRates(_previousNet, net, seconds)
     netInterfaces = netRates.interfaces
@@ -407,6 +450,73 @@ Item {
     running: root.netWatchers > 0 && root.netTool === "ss"
     repeat: true
     onTriggered: if (!socketProc.running) socketProc.running = true
+  }
+
+  Process {
+    id: diskIoProc
+    command: ["bash", root.pluginDir + "/processes.sh", "--disk"]
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: {
+        if (root.diskProcessWatchers === 0) return
+        var now = Date.now()
+        var io = Model.parseDiskIo(text)
+        if (root._previousDiskIo) {
+          root.diskProcesses = Model.diskIoRates(root._previousDiskIo, io, (now - root._previousDiskIoAt) / 1000, 5)
+          root.diskProcessesReady = true
+        }
+        root._previousDiskIo = io
+        root._previousDiskIoAt = now
+      }
+    }
+  }
+
+  Timer {
+    interval: 2000
+    running: root.diskProcessWatchers > 0
+    repeat: true
+    onTriggered: if (!diskIoProc.running) diskIoProc.running = true
+  }
+
+  Process {
+    id: gpuClientProc
+    command: ["bash", root.pluginDir + "/processes.sh", "--gpu"]
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: {
+        if (root.gpuProcessWatchers === 0) return
+        var now = Date.now()
+        var clients = Model.parseDrmClients(text.split("\n"))
+        if (root._previousGpuClients) {
+          root.gpuProcesses = Model.drmProcesses(root._previousGpuClients, clients,
+            (now - root._previousGpuClientsAt) / 1000, 5, root._nvidiaProcesses)
+          root.gpuProcessesReady = true
+        }
+        root._previousGpuClients = clients
+        root._previousGpuClientsAt = now
+      }
+    }
+  }
+
+  // NVIDIA's driver keeps its own count of who is using the card.
+  Process {
+    id: nvidiaPmonProc
+    command: ["nvidia-smi", "pmon", "-c", "1", "-s", "u"]
+    environment: ({ LC_ALL: "C" })
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: root._nvidiaProcesses = Model.parseNvidiaPmon(text)
+    }
+  }
+
+  Timer {
+    interval: 2000
+    running: root.gpuProcessWatchers > 0
+    repeat: true
+    onTriggered: {
+      if (root._hasNvidia && !nvidiaPmonProc.running) nvidiaPmonProc.running = true
+      if (!gpuClientProc.running) gpuClientProc.running = true
+    }
   }
 
   // top's first frame measures since boot, so each run takes two a second

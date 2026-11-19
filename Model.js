@@ -543,6 +543,13 @@ function parseDrmClients(lines) {
       continue
     }
     if (card === null) continue
+    // processes.sh says whose each client is, after the client's own lines.
+    if (line.indexOf("gauges-") === 0) {
+      if (client === null) continue
+      if (line.indexOf("gauges-pid:") === 0) client.pid = Number(line.slice(11)) || 0
+      else if (line.indexOf("gauges-name:") === 0) client.name = line.slice(12).trim()
+      continue
+    }
     var match = line.match(/^(drm-[a-z0-9-]+):\s*(\d+)/)
     if (!match) continue
     var key = match[1]
@@ -613,6 +620,70 @@ function drmLoad(previous, current, seconds) {
     load[card] = busiest === null ? null : clamp01(busiest)
   }
   return load
+}
+
+// How busy each program keeps the graphics cards, between two readings of
+// processes.sh --gpu: [{ name, count, load }], heaviest first. A program is
+// as busy as its busiest engine, like a card, and its processes are added
+// together. `extra` is the same kind of list from elsewhere (nvidia-smi).
+function drmProcesses(previous, current, seconds, limit, extra) {
+  var groups = {}
+  function add(name, pid, load) {
+    if (!name || !(load > 0)) return
+    var group = groups[name]
+    if (!group) group = groups[name] = { name: name, load: 0, pids: {} }
+    group.load += load
+    group.pids[pid] = true
+  }
+  for (var card in current) {
+    var before = previous ? previous[card] : null
+    if (!before || !(seconds > 0)) continue
+    for (var id in current[card]) {
+      var now = current[card][id]
+      var then = before[id]
+      if (!then || !now.name) continue
+      var busiest = 0
+      var name
+      for (name in now.engine) {
+        if (then.engine[name] === undefined) continue
+        var spent = Math.max(0, now.engine[name] - then.engine[name])
+        busiest = Math.max(busiest, spent / (seconds * 1e9 * (now.capacity[name] || 1)))
+      }
+      for (name in now.total) {
+        if (then.total[name] === undefined || then.cycles[name] === undefined || now.cycles[name] === undefined) continue
+        var elapsed = now.total[name] - then.total[name]
+        if (!(elapsed > 0)) continue
+        busiest = Math.max(busiest, Math.max(0, now.cycles[name] - then.cycles[name]) / (elapsed * (now.capacity[name] || 1)))
+      }
+      add(now.name, now.pid, busiest)
+    }
+  }
+  for (var i = 0; extra && i < extra.length; i++) add(extra[i].name, extra[i].pid, extra[i].load)
+  var list = Object.keys(groups).map(function(key) {
+    var group = groups[key]
+    return { name: group.name, load: clamp01(group.load), count: Object.keys(group.pids).length }
+  })
+  list.sort(function(a, b) { return b.load - a.load || (a.name < b.name ? -1 : 1) })
+  // Under half a percent is a program that merely has the card open.
+  return list.filter(function(entry) { return entry.load >= 0.005 }).slice(0, limit)
+}
+
+// Per-process load from `nvidia-smi pmon -c 1 -s u`, whose rows read
+// "<gpu> <pid> <type> <sm%> <mem%> <enc%> <dec%> ... <command>", with "-"
+// where there is nothing to say.
+function parseNvidiaPmon(text) {
+  var rows = []
+  var lines = String(text || "").split("\n")
+  for (var i = 0; i < lines.length; i++) {
+    var line = lines[i].trim()
+    if (line === "" || line[0] === "#") continue
+    var fields = line.split(/\s+/)
+    if (fields.length < 5 || !/^\d+$/.test(fields[1])) continue
+    var load = Number(fields[3])
+    if (!isFinite(load)) continue
+    rows.push({ pid: Number(fields[1]), name: fields[fields.length - 1], load: load / 100 })
+  }
+  return rows
 }
 
 // `clientLoad` is drmLoad's result, used for cards that give no figure.
@@ -740,6 +811,44 @@ function topProcesses(rows, key, limit) {
   return list.slice(0, limit).filter(function(entry) { return entry[key] > 0 })
 }
 
+// Bytes each process has read from and written to disk since it started,
+// from processes.sh --disk: "<pid> <read> <written> <name>" a line.
+function parseDiskIo(text) {
+  var processes = {}
+  var lines = String(text || "").split("\n")
+  for (var i = 0; i < lines.length; i++) {
+    var match = lines[i].match(/^(\d+) (\d+) (\d+) (.+)$/)
+    if (!match) continue
+    processes[match[1]] = { name: match[4], read: Number(match[2]), write: Number(match[3]) }
+  }
+  return processes
+}
+
+// The programs reading and writing the most between two such readings, in
+// bytes a second: [{ name, count, read, write }], each program's processes
+// added together.
+function diskIoRates(previous, current, seconds, limit) {
+  var groups = {}
+  if (!previous || !current || !(seconds > 0)) return []
+  for (var pid in current) {
+    var now = current[pid]
+    var then = previous[pid]
+    // A pid seen before under another name is a new process reusing it.
+    if (!then || then.name !== now.name) continue
+    var read = Math.max(0, now.read - then.read) / seconds
+    var write = Math.max(0, now.write - then.write) / seconds
+    if (read + write <= 0) continue
+    var group = groups[now.name]
+    if (!group) group = groups[now.name] = { name: now.name, read: 0, write: 0, count: 0 }
+    group.read += read
+    group.write += write
+    group.count += 1
+  }
+  var list = Object.keys(groups).map(function(name) { return groups[name] })
+  list.sort(function(a, b) { return (b.read + b.write) - (a.read + a.write) || (a.name < b.name ? -1 : 1) })
+  return list.slice(0, limit)
+}
+
 // --------------------------------------------------------------- formatting
 
 // A byte count as a number and an IEC unit, e.g. { value: 62.7, decimals: 1, unit: "GiB" }.
@@ -819,6 +928,10 @@ if (typeof module !== "undefined") {
     primaryGpu: primaryGpu,
     parseDrmClients: parseDrmClients,
     drmLoad: drmLoad,
+    drmProcesses: drmProcesses,
+    parseNvidiaPmon: parseNvidiaPmon,
+    parseDiskIo: parseDiskIo,
+    diskIoRates: diskIoRates,
     gpuAvailable: gpuAvailable,
     parseTop: parseTop,
     topProcesses: topProcesses,

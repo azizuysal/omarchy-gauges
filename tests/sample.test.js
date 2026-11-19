@@ -174,3 +174,39 @@ test("T2 Mac: the security chip's network link is not counted as a connection", 
   assert.equal(net.wlp5s0.physical, true)
   assert.deepEqual(Model.netRates(null, net, 2).interfaces.map(entry => entry.name), ["enp5s0u2", "wlp5s0"])
 })
+
+function processes(mode, root) {
+  const out = execFileSync("bash", [path.join(__dirname, "..", "processes.sh"), mode], { env: { ...process.env, GAUGES_ROOT: root }, encoding: "utf8" })
+  fs.rmSync(root, { recursive: true, force: true })
+  return out
+}
+
+test("processes.sh --disk lists what each readable process has read and written", () => {
+  const out = processes("--disk", machine({
+    "proc/10/io": "rchar: 5\nwchar: 6\nread_bytes: 4096\nwrite_bytes: 8192\ncancelled_write_bytes: 0\n",
+    "proc/10/comm": "browser\n",
+    "proc/11/comm": "no-io-file\n",
+    "proc/12/io": "rchar: 5\n",
+    "proc/12/comm": "partial\n"
+  }))
+  assert.equal(out, "10 4096 8192 browser\n")
+})
+
+test("processes.sh --gpu names the holder of each client and skips sleeping cards", () => {
+  const out = processes("--gpu", machine({
+    "sys/class/drm/card1/device/drm/renderD128/dev": "226:128\n",
+    "sys/class/drm/card1-eDP-1/status": "connected\n",
+    "sys/class/drm/card2/device/power/runtime_status": "suspended\n",
+    "sys/class/drm/card2/device/drm/renderD129/dev": "226:129\n",
+    "dev/dri/renderD129": { link: "/dev/zero" },
+    "proc/88/fd/3": { link: "/dev/zero" },
+    "proc/88/fdinfo/3": "drm-client-id:\t9\ndrm-engine-gfx:\t5 ns\n",
+    "proc/88/comm": "sleeper\n",
+    "proc/77/comm": "player\n",
+    "proc/78/fd/9": { link: "/dev/null" },
+    "proc/78/fdinfo/9": "drm-client-id:\t34\ndrm-engine-render:\t500 ns\n",
+    "proc/78/comm": "second-holder\n",
+    ...client(77, 4, "renderD128", "pos:\t0\ndrm-driver:\ti915\ndrm-client-id:\t34\ndrm-engine-render:\t500 ns\n")
+  }))
+  assert.equal(out, "@ card1\ndrm-client-id:\t34\ndrm-engine-render:\t500 ns\ngauges-pid: 77\ngauges-name: player\n")
+})
