@@ -126,7 +126,7 @@ test("virtual machine: no sensors, no card, nothing breaks", () => {
   }))
   const parsed = Model.parseStatic(info.sections)
   assert.equal(parsed.cpuModel, "Intel Celeron N5105")
-  assert.deepEqual(parsed.gpuNames, {})
+  assert.deepEqual({ ...parsed.gpuNames }, {})
   assert.equal(Model.parseTemps(frame.sections.temps).cpu, null)
   assert.deepEqual(frame.sections.gpus, [])
   assert.equal(frame.sections.drmclients, undefined)

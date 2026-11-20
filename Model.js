@@ -1,6 +1,15 @@
 // Pure parsing and arithmetic for the gauges plugin. Nothing here touches QML,
 // so the whole file runs under node for tests (see tests/model.test.js).
 
+// A lookup table with nothing in it to begin with. Names from outside (a
+// process called "constructor", an interface called "toString") are used as
+// keys, and an ordinary object would answer for those with its own built-ins.
+function table() { return Object.create(null) }
+// The same care for the fixed tables below: only what was written into them.
+function own(object, key) {
+  return Object.prototype.hasOwnProperty.call(object, key) ? object[key] : undefined
+}
+
 var SECTOR_BYTES = 512
 // Who makes a card, by PCI vendor id or, for cards that are not on a PCI bus
 // (every ARM system-on-chip), by the name of its kernel driver.
@@ -43,7 +52,7 @@ function clamp01(value) {
 // Splits the lines between a "@@static"/"@@frame" marker and its "@@end"
 // into named sections.
 function parseBlock(lines) {
-  var block = { kind: "", uptime: 0, sections: {} }
+  var block = { kind: "", uptime: 0, sections: table() }
   var current = null
   for (var i = 0; i < lines.length; i++) {
     var line = lines[i]
@@ -64,7 +73,7 @@ function parseBlock(lines) {
 }
 
 function parseStatic(sections) {
-  var info = { cpuModel: "", blocks: [], gpuNames: {} }
+  var info = { cpuModel: "", blocks: [], gpuNames: table() }
   var cpuinfo = sections.cpuinfo || []
   if (cpuinfo.length > 0) {
     var colon = cpuinfo[0].indexOf(":")
@@ -97,7 +106,7 @@ function cleanCpuModel(raw) {
 // lspci describes a card as "Vendor Corp Codename [Marketing Name/Other] (rev xx)".
 // The marketing name is the part worth showing.
 function gpuName(vendorId, label) {
-  var vendor = VENDORS[String(vendorId).toLowerCase()] || ""
+  var vendor = own(VENDORS, String(vendorId).toLowerCase()) || ""
   var text = String(label || "").replace(/\s*\(rev [0-9a-f]+\)\s*$/i, "")
   var brackets = text.match(/\[([^\]]+)\]/g)
   var model = ""
@@ -109,7 +118,7 @@ function gpuName(vendorId, label) {
   if (model === "") {
     model = text.replace(/^.*(Corporation|Inc\.|Devices, Inc\.|Corp\.)\s*/i, "").replace(/\[[^\]]*\]/g, "").trim()
   }
-  if (model === "") return VENDOR_CARDS[vendor] || vendor || "GPU"
+  if (model === "") return own(VENDOR_CARDS, vendor) || vendor || "GPU"
   if (vendor !== "" && model.toLowerCase().indexOf(vendor.toLowerCase()) !== 0) return vendor + " " + model
   return model
 }
@@ -180,7 +189,7 @@ function parseLoad(lines) {
 // ------------------------------------------------------------------- memory
 
 function parseMeminfo(lines) {
-  var kb = {}
+  var kb = table()
   for (var i = 0; i < lines.length; i++) {
     var match = lines[i].match(/^(\w+):\s+(\d+)/)
     if (match) kb[match[1]] = Number(match[2]) * 1024
@@ -222,10 +231,10 @@ function looksLikePartition(name) {
 // Sector counters for whole disks. `blocks` is the list of /sys/block names,
 // which is what tells a disk from one of its partitions.
 function parseDiskstats(lines, blocks) {
-  var known = {}
+  var known = table()
   var haveBlocks = blocks && blocks.length > 0
   for (var b = 0; haveBlocks && b < blocks.length; b++) known[blocks[b]] = true
-  var disks = {}
+  var disks = table()
   for (var i = 0; i < lines.length; i++) {
     var fields = lines[i].trim().split(/\s+/)
     if (fields.length < 10) continue
@@ -260,7 +269,7 @@ function diskRates(previous, current, seconds) {
 // Byte counters per interface, from sample.sh's "net" section: each line is
 // "<p|v> <link state> <wifi|wired> <line of /proc/net/dev>".
 function parseNet(lines) {
-  var interfaces = {}
+  var interfaces = table()
   for (var i = 0; i < lines.length; i++) {
     var match = lines[i].match(/^([pv])\s+(\S+)\s+(wifi|wired)\s+([^:]+):\s*(.*)$/)
     if (!match) continue
@@ -315,7 +324,7 @@ function netRates(previous, current, seconds) {
 // would give out, so not loopback, link-local or a privacy address that has
 // been retired. Returns { "<interface>": { v4: [...], v6: [...] } }.
 function parseAddresses(text) {
-  var addresses = {}
+  var addresses = table()
   var entries
   try { entries = JSON.parse(text) } catch (error) { return addresses }
   if (!Array.isArray(entries)) return addresses
@@ -378,7 +387,7 @@ function flagEmoji(country) {
 //
 // Returns { "<local> <remote>": { name, sent, received } }.
 function parseSockets(text) {
-  var sockets = {}
+  var sockets = table()
   var lines = String(text || "").split("\n")
   for (var i = 0; i < lines.length; i++) {
     var line = lines[i]
@@ -406,7 +415,7 @@ function parseSockets(text) {
 // between, so all of it counts.
 function socketRates(previous, current, seconds, limit) {
   if (!previous || !current || !(seconds > 0)) return []
-  var programs = {}
+  var programs = table()
   for (var key in current) {
     var now = current[key]
     var then = previous[key]
@@ -429,7 +438,7 @@ function socketRates(previous, current, seconds, limit) {
 // and two catch-all lines, "unknown TCP/0/0" and "unknown UDP/0/0", for
 // packets it could not tie to a program.
 function parseNethogs(lines, limit) {
-  var programs = {}
+  var programs = table()
   for (var i = 0; i < lines.length; i++) {
     var fields = lines[i].split("\t")
     if (fields.length < 3) continue
@@ -465,7 +474,7 @@ function rateCompact(bytesPerSecond) {
 // several times over (subvolumes) is one disk, shown at its shortest mount.
 function parseDf(text) {
   var lines = String(text || "").split("\n")
-  var byDevice = {}
+  var byDevice = table()
   for (var i = 1; i < lines.length; i++) {
     var fields = lines[i].trim().split(/\s+/)
     if (fields.length < 7) continue
@@ -531,7 +540,7 @@ function parseTemps(lines) {
 // Returns { card: { clientId: { engine: {...}, cycles: {...}, total: {...},
 // capacity: {...} } } }, each keyed by engine name.
 function parseDrmClients(lines) {
-  var cards = {}
+  var cards = table()
   var card = null
   var client = null
   for (var i = 0; i < lines.length; i++) {
@@ -539,7 +548,7 @@ function parseDrmClients(lines) {
     if (line.indexOf("@ ") === 0) {
       card = line.slice(2).trim()
       client = null
-      if (!cards[card]) cards[card] = {}
+      if (!cards[card]) cards[card] = table()
       continue
     }
     if (card === null) continue
@@ -557,7 +566,7 @@ function parseDrmClients(lines) {
     if (key === "drm-client-id") {
       // A program can hold several handles on the same client, and several
       // programs can share one; they all report the same counters.
-      if (!cards[card][value]) cards[card][value] = { engine: {}, cycles: {}, total: {}, capacity: {} }
+      if (!cards[card][value]) cards[card][value] = { engine: table(), cycles: table(), total: table(), capacity: table() }
       client = cards[card][value]
       continue
     }
@@ -580,15 +589,15 @@ function parseDrmClients(lines) {
 // as its busiest engine: the 3D engine sitting idle while video decodes is
 // still a busy card.
 function drmLoad(previous, current, seconds) {
-  var load = {}
+  var load = table()
   for (var card in current) {
     load[card] = null
     var before = previous ? previous[card] : null
     if (!before || !(seconds > 0)) continue
-    var spent = {}     // engine -> nanoseconds used, all programs together
-    var cycles = {}    // engine -> cycles used, all programs together
-    var elapsed = {}   // engine -> cycles the engine's clock advanced
-    var capacity = {}
+    var spent = table()     // engine -> nanoseconds used, all programs together
+    var cycles = table()    // engine -> cycles used, all programs together
+    var elapsed = table()   // engine -> cycles the engine's clock advanced
+    var capacity = table()
     for (var id in current[card]) {
       var now = current[card][id]
       var then = before[id]
@@ -627,11 +636,11 @@ function drmLoad(previous, current, seconds) {
 // as busy as its busiest engine, like a card, and its processes are added
 // together. `extra` is the same kind of list from elsewhere (nvidia-smi).
 function drmProcesses(previous, current, seconds, limit, extra) {
-  var groups = {}
+  var groups = table()
   function add(name, pid, load) {
     if (!name || !(load > 0)) return
     var group = groups[name]
-    if (!group) group = groups[name] = { name: name, load: 0, pids: {} }
+    if (!group) group = groups[name] = { name: name, load: 0, pids: table() }
     group.load += load
     group.pids[pid] = true
   }
@@ -701,8 +710,8 @@ function parseGpus(lines, names, nvidiaLines, clientLoad) {
     var freqMax = num(f[9])
     gpus.push({
       id: f[0],
-      vendor: VENDORS[vendorId] || "",
-      name: (names && names[f[0]]) || VENDORS[vendorId] || "GPU",
+      vendor: own(VENDORS, vendorId) || "",
+      name: (names && names[f[0]]) || own(VENDORS, vendorId) || "GPU",
       asleep: f[2] === "asleep",
       busy: busy === null ? null : clamp01(busy / 100),
       vramUsed: num(f[4]),
@@ -797,7 +806,7 @@ function parseTop(text) {
 // Adds a program's processes together, the way a person counts "the browser"
 // as one thing, and returns the heaviest by cpu or by memory.
 function topProcesses(rows, key, limit) {
-  var groups = {}
+  var groups = table()
   for (var i = 0; i < rows.length; i++) {
     var row = rows[i]
     var group = groups[row.name]
@@ -814,7 +823,7 @@ function topProcesses(rows, key, limit) {
 // Bytes each process has read from and written to disk since it started,
 // from processes.sh --disk: "<pid> <read> <written> <name>" a line.
 function parseDiskIo(text) {
-  var processes = {}
+  var processes = table()
   var lines = String(text || "").split("\n")
   for (var i = 0; i < lines.length; i++) {
     var match = lines[i].match(/^(\d+) (\d+) (\d+) (.+)$/)
@@ -828,7 +837,7 @@ function parseDiskIo(text) {
 // bytes a second: [{ name, count, read, write }], each program's processes
 // added together.
 function diskIoRates(previous, current, seconds, limit) {
-  var groups = {}
+  var groups = table()
   if (!previous || !current || !(seconds > 0)) return []
   for (var pid in current) {
     var now = current[pid]

@@ -101,7 +101,7 @@ test("parseDiskstats keeps whole disks and drops partitions and virtual devices"
     " 254       0 zram0 10 0 80 0 10 0 80 0 0 0 0",
     "   7       0 loop0 10 0 80 0 0 0 0 0 0 0 0"
   ]
-  assert.deepEqual(Model.parseDiskstats(lines, ["dm-0", "nvme0n1", "zram0"]), { nvme0n1: { read: 7875144, written: 34312512 } })
+  assert.deepEqual({ ...Model.parseDiskstats(lines, ["dm-0", "nvme0n1", "zram0"]) }, { nvme0n1: { read: 7875144, written: 34312512 } })
   // Without the /sys/block list the partition suffix is the only clue.
   assert.deepEqual(Object.keys(Model.parseDiskstats(lines, [])), ["nvme0n1"])
 })
@@ -366,8 +366,8 @@ test("parseAddresses keeps the addresses worth showing", () => {
   assert.deepEqual(addresses.lo, { v4: [], v6: [] })
   assert.deepEqual(addresses.wlp5s0, { v4: ["192.168.1.42"], v6: ["2001:db8::1"] })
   assert.deepEqual(addresses.eth0, { v4: [], v6: [] })
-  assert.deepEqual(Model.parseAddresses("not json"), {})
-  assert.deepEqual(Model.parseAddresses("{}"), {})
+  assert.deepEqual({ ...Model.parseAddresses("not json") }, {})
+  assert.deepEqual({ ...Model.parseAddresses("{}") }, {})
 })
 
 test("parseTrace reads the address and country and refuses anything else", () => {
@@ -391,7 +391,7 @@ test("diskIoRates adds a program's processes together and ranks by traffic", () 
   const after = Model.parseDiskIo("10 3000 2000 browser\n11 0 4000 browser\n12 500 500 idle\n13 9000 0 new\n14 100 100 fresh\n")
   assert.deepEqual(Model.diskIoRates(before, after, 2, 5), [{ name: "browser", read: 1000, write: 3000, count: 2 }])
   assert.deepEqual(Model.diskIoRates(null, after, 2, 5), [])
-  assert.deepEqual(Model.parseDiskIo("garbage\n12 x 3 name\n"), {})
+  assert.deepEqual({ ...Model.parseDiskIo("garbage\n12 x 3 name\n") }, {})
 })
 
 test("drmProcesses says which programs keep a card busy", () => {
@@ -420,4 +420,62 @@ test("parseNvidiaPmon reads each process's share", () => {
     + "    0       5678     C      -      -      -      -      -      -    idle           \n"
   assert.deepEqual(Model.parseNvidiaPmon(text), [{ pid: 1234, name: "game", load: 0.35 }])
   assert.deepEqual(Model.parseNvidiaPmon(""), [])
+})
+
+// Names come from outside, and some of them are also the names of things
+// every JavaScript object has. They are programs like any other.
+const BUILT_INS = ["constructor", "toString", "valueOf", "hasOwnProperty", "__proto__"]
+
+function builtInsUntouched() {
+  for (const key of ["down", "up", "cpu", "memory", "count", "read", "write", "load", "pids"]) {
+    assert.equal(Object.prototype[key], undefined)
+    assert.equal(Object[key], undefined)
+    assert.equal(Object.prototype.toString[key], undefined)
+    assert.equal(Object.prototype.valueOf[key], undefined)
+    assert.equal(Object.prototype.hasOwnProperty[key], undefined)
+  }
+}
+
+test("a program named like a built-in is counted like any other", () => {
+  for (const name of BUILT_INS) {
+    assert.deepEqual(Model.parseNethogs([`/usr/bin/${name} --flag/10/1000\t1\t2`, `${name}/11/1000\t1\t2`], 5),
+      [{ name, down: 4096, up: 2048, unknown: false }])
+
+    const sockets = text => Model.parseSockets(text)
+    const before = sockets(`tcp ESTAB 0 0 10.0.0.2:1 1.1.1.1:443 users:(("${name}",pid=1,fd=3)) bytes_acked:100 bytes_received:100`)
+    const after = sockets(`tcp ESTAB 0 0 10.0.0.2:1 1.1.1.1:443 users:(("${name}",pid=1,fd=3)) bytes_acked:300 bytes_received:500`)
+    assert.deepEqual(Model.socketRates(before, after, 2, 5), [{ name, down: 200, up: 100 }])
+
+    const rows = [{ pid: 1, cpu: 10, memory: 100, name }, { pid: 2, cpu: 5, memory: 50, name }]
+    assert.deepEqual(Model.topProcesses(rows, "cpu", 5), [{ name, cpu: 15, memory: 150, count: 2 }])
+
+    const then = Model.parseDiskIo(`10 0 0 ${name}\n11 0 0 ${name}\n`)
+    const now = Model.parseDiskIo(`10 2000 0 ${name}\n11 0 4000 ${name}\n`)
+    assert.deepEqual(Model.diskIoRates(then, now, 2, 5), [{ name, read: 1000, write: 2000, count: 2 }])
+
+    const client = ns => Model.parseDrmClients(["@ card0", "drm-client-id: 7", `drm-engine-render: ${ns} ns`, "gauges-pid: 10", `gauges-name: ${name}`])
+    assert.deepEqual(Model.drmProcesses(client(0), client(1e9), 2, 5), [{ name, load: 0.5, count: 1 }])
+    assert.deepEqual(Model.drmProcesses(null, null, 2, 5, [{ name, pid: 3, load: 0.25 }]), [{ name, load: 0.25, count: 1 }])
+  }
+  builtInsUntouched()
+})
+
+test("an interface, disk, card or engine named like a built-in is read like any other", () => {
+  for (const name of BUILT_INS) {
+    const disk = n => Model.parseDiskstats([` 8 0 ${name} 1 0 ${n} 0 1 0 ${n} 0 0 0 0`], [name])
+    assert.deepEqual(Model.diskRates(disk(0), disk(2), 1).disks, [{ name, read: 1024, write: 1024 }])
+
+    const addresses = Model.parseAddresses(JSON.stringify([{ ifname: name, addr_info: [{ family: "inet", local: "10.0.0.1", scope: "global" }] }]))
+    assert.deepEqual(addresses[name], { v4: ["10.0.0.1"], v6: [] })
+    assert.equal(Model.parseAddresses("[]")[name], undefined)
+
+    // Engine names are lower case in the kernel's format; others are not read.
+    const engine = /^[a-z0-9-]+$/.test(name) ? name : "render"
+    const card = ns => Model.parseDrmClients([`@ ${name}`, "drm-client-id: 7", `drm-engine-${engine}: ${ns} ns`])
+    assert.equal(Model.drmLoad(card(0), card(1e9), 2)[name], 0.5)
+
+    assert.equal(Model.gpuName(name, ""), "GPU")
+    assert.deepEqual(Model.parseBlock(["@@frame 1", `@@section ${name}`, "line"]).sections[name], ["line"])
+  }
+  builtInsUntouched()
 })
